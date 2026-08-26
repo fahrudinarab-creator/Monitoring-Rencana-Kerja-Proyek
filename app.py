@@ -39,17 +39,75 @@ PALETTE = ["#1F4D36", "#C08A2E", "#3C7A5A", "#B25330", "#7C9A85", "#8C6A2E", "#4
 st.markdown(
     f"""
     <style>
-    .stApp {{ background-color: #F4F5EF; }}
-    h1, h2, h3 {{ font-family: 'Georgia', serif; color: {FOREST}; }}
+    /* Paksa tema terang ini terlepas dari mode gelap/terang browser/OS, supaya
+       tidak bergantung pada .streamlit/config.toml ikut ter-upload atau tidak. */
+
+    html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"],
+    [data-testid="stMain"], [data-testid="stBottomBlockContainer"] {{
+        background-color: #F4F5EF !important;
+        color: #1B2A1E !important;
+    }}
+
+    h1, h2, h3, h4, h5, h6,
+    [data-testid="stMarkdownContainer"] h1, [data-testid="stMarkdownContainer"] h2,
+    [data-testid="stMarkdownContainer"] h3, [data-testid="stMarkdownContainer"] h4 {{
+        font-family: 'Georgia', serif !important; color: {FOREST} !important;
+    }}
+
+    [data-testid="stMarkdownContainer"] p,
+    [data-testid="stMarkdownContainer"] li,
+    [data-testid="stMarkdownContainer"] span,
+    .stCaption, [data-testid="stCaptionContainer"],
+    label, .stRadio label, .stRadio span {{
+        color: #1B2A1E !important;
+    }}
+    [data-testid="stCaptionContainer"] p {{ color: #6C7566 !important; }}
+
     div[data-testid="stMetric"] {{
-        background: #FFFFFF; border: 1px solid #E1E3D9; border-radius: 12px;
+        background: #FFFFFF !important; border: 1px solid #E1E3D9; border-radius: 12px;
         padding: 14px 16px; box-shadow: 0 1px 2px rgba(27,42,30,0.04);
     }}
-    div[data-testid="stMetricLabel"] {{ color: #6C7566; font-size: 12.5px; }}
-    div[data-testid="stMetricValue"] {{ color: {FOREST}; }}
+    div[data-testid="stMetricLabel"] p {{ color: #6C7566 !important; font-size: 12.5px; }}
+    div[data-testid="stMetricValue"] {{ color: {FOREST} !important; }}
+    div[data-testid="stMetricDelta"] {{ color: {FOREST_LIGHT} !important; }}
+
+    /* Tabs */
+    button[data-baseweb="tab"] p {{ color: #6C7566 !important; font-weight: 600; }}
+    button[data-baseweb="tab"][aria-selected="true"] p {{ color: {FOREST} !important; }}
+    [data-testid="stTabs"] {{ background: transparent !important; }}
+    div[data-baseweb="tab-highlight"] {{ background-color: {GOLD} !important; }}
+    div[data-baseweb="tab-border"] {{ background-color: #E1E3D9 !important; }}
+
+    /* Sidebar — bertema hijau tua supaya konsisten sebagai identitas brand */
+    section[data-testid="stSidebar"] {{
+        background-color: #17372A !important;
+    }}
+    section[data-testid="stSidebar"] * {{
+        color: #F4F5EF !important;
+    }}
+    section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{
+        color: #B9D6C4 !important;
+    }}
+    section[data-testid="stSidebar"] .stButton button {{
+        background-color: {GOLD} !important; color: #2A1D06 !important; border: none !important;
+    }}
+    section[data-testid="stSidebar"] [data-testid="stExpander"] {{
+        border: 1px solid rgba(255,255,255,0.2) !important; border-radius: 10px;
+    }}
+    section[data-testid="stSidebar"] [data-testid="stAlertContainer"] {{
+        color: #1B2A1E !important;
+    }}
+    section[data-testid="stSidebar"] [data-testid="stAlertContainer"] * {{
+        color: #1B2A1E !important;
+    }}
+
+    /* Dataframe / table */
+    [data-testid="stDataFrame"] {{ color: #1B2A1E !important; }}
+
     .badge-wait {{ background:#F5E4DA; color:{RUST}; padding:3px 10px; border-radius:99px; font-size:11.5px; font-weight:700; }}
     .badge-ok {{ background:#E4EEE7; color:{FOREST}; padding:3px 10px; border-radius:99px; font-size:11.5px; font-weight:700; }}
-    .footnote {{ background:#E4EEE7; border-radius:10px; padding:12px 14px; font-size:13px; color:#3d4a40; }}
+    .footnote {{ background:#E4EEE7; border-radius:10px; padding:12px 14px; font-size:13px; color:#3d4a40 !important; }}
+    .footnote * {{ color:#3d4a40 !important; }}
     </style>
     """,
     unsafe_allow_html=True,
