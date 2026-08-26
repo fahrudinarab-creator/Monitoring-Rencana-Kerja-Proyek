@@ -537,11 +537,11 @@ if selected_view == "📊 Ringkasan":
         marker_color=[PALETTE[i % len(PALETTE)] for i in range(len(names))],
         text=[fmt_rp(v) for v in vals], textposition="outside",
     ))
-    fig.update_layout(height=100 + 60 * len(names), margin=dict(l=10, r=10, t=10, b=10),
+    fig.update_layout(height=100 + 60 * len(names), margin=dict(l=10, r=40, t=10, b=10),
                        xaxis_title="Rp", plot_bgcolor="white", paper_bgcolor="white",
                        font=dict(color="#1B2A1E", size=13),
                        xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
-                       yaxis=dict(color="#1B2A1E"))
+                       yaxis=dict(color="#1B2A1E", automargin=True))
     st.plotly_chart(fig, use_container_width=True, theme=None)
 
     st.markdown("#### Target Fisik per Periode (Catur Wulan) — Semua Proyek")
@@ -554,10 +554,10 @@ if selected_view == "📊 Ringkasan":
                      marker_color=PALETTE[i % len(PALETTE)])
     fig2.update_layout(barmode="stack", height=380, margin=dict(l=10, r=10, t=10, b=10),
                         yaxis_title="Ha", plot_bgcolor="white", paper_bgcolor="white",
-                        legend=dict(orientation="h", y=-0.2, font=dict(color="#1B2A1E")),
+                        legend=dict(orientation="h", y=-0.3, font=dict(color="#1B2A1E", size=11)),
                         font=dict(color="#1B2A1E", size=13),
                         xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
-                        yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"))
+                        yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E", automargin=True))
     st.plotly_chart(fig2, use_container_width=True, theme=None)
 
     st.markdown("#### Daftar Proyek")
