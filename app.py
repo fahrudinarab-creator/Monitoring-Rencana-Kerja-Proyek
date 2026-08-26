@@ -483,11 +483,18 @@ if projects_all:
         if projects_all and not projects:
             st.warning("Tidak ada proyek yang cocok dengan filter ini.")
 
+        if projects:
+            st.markdown("#### 👁️ Tampilan")
+            view_options = ["📊 Ringkasan"] + [p["meta"]["name"] for p in projects.values()]
+            if st.session_state.get("view_select") not in view_options:
+                st.session_state["view_select"] = view_options[0]
+            st.selectbox("Pilih tampilan", view_options, key="view_select", label_visibility="collapsed")
+
 
 # ============================================================
 # MAIN
 # ============================================================
-st.title("🌴 RKP Monitor")
+st.title("🌴 Monitoring RKP")
 st.caption("Dashboard konsolidasi Rencana Kerja Proyek — banding biaya & capaian fisik lintas proyek.")
 
 if not projects_all:
@@ -501,14 +508,12 @@ if not projects:
     st.warning("Tidak ada proyek yang cocok dengan filter Perusahaan/Proyek yang dipilih di sidebar. Coba longgarkan filternya.")
     st.stop()
 
-view = st.session_state.get("view", "overview")
-selected_id = st.session_state.get("selected_id")
+selected_view = st.session_state.get("view_select", "📊 Ringkasan")
 
-tab_labels = ["📊 Ringkasan"] + [f"📁 {p['meta']['name']}" for p in projects.values()]
-tabs = st.tabs(tab_labels)
-
-# ---------------- OVERVIEW TAB ----------------
-with tabs[0]:
+# ================================================================
+# RINGKASAN (semua proyek terfilter)
+# ================================================================
+if selected_view == "📊 Ringkasan":
     total_biaya = sum((total_rencana(p) or 0) for p in projects.values())
     total_luas = sum((luas_proj(p) or 0) for p in projects.values())
     avg_rp_ha = total_biaya / total_luas if total_luas else None
@@ -575,85 +580,91 @@ with tabs[0]:
                 unsafe_allow_html=True,
             )
 
-# ---------------- DETAIL TABS (one per project) ----------------
-for idx, p in enumerate(projects.values()):
-    with tabs[idx + 1]:
-        real = has_realisasi(p)
-        total = total_rencana(p)
-        luas = luas_proj(p)
+# ================================================================
+# DETAIL SATU PROYEK (dipilih lewat dropdown sidebar)
+# ================================================================
+else:
+    p = next((pp for pp in projects.values() if pp["meta"]["name"] == selected_view), None)
+    if p is None:
+        st.warning("Proyek tidak ditemukan pada hasil filter saat ini. Kembali ke Ringkasan.")
+        st.stop()
 
-        st.subheader(p["meta"]["name"])
-        st.caption(f"{p['meta']['company']}" + (f" · {p['meta']['desc']}" if p["meta"]["desc"] else "") +
-                   (f" · {p['meta']['periode_text']}" if p["meta"]["periode_text"] else ""))
+    real = has_realisasi(p)
+    total = total_rencana(p)
+    luas = luas_proj(p)
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Luas", fmt_ha(luas))
-        c2.metric("Total Biaya Rencana", fmt_rp(total), fmt_rp_full(total))
-        c3.metric("Biaya / Ha", fmt_rp(rp_per_ha(p)))
-        c4.metric("Status Realisasi", "Tersedia" if real else "Belum ada")
+    st.subheader(p["meta"]["name"])
+    st.caption(f"{p['meta']['company']}" + (f" · {p['meta']['desc']}" if p["meta"]["desc"] else "") +
+               (f" · {p['meta']['periode_text']}" if p["meta"]["periode_text"] else ""))
 
-        if not real:
-            st.markdown(
-                """<div class="footnote">📋 File ini belum berisi data realisasi (kolom/sheet "Realisasi" tidak
-                terdeteksi). Tambahkan sheet baru bernama mengandung kata <b>Realisasi</b> dengan struktur tabel
-                yang mirip sheet RKP, lalu upload ulang — dashboard otomatis akan menampilkan perbandingan
-                Rencana vs Realisasi di sini.</div>""",
-                unsafe_allow_html=True,
-            )
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Luas", fmt_ha(luas))
+    c2.metric("Total Biaya Rencana", fmt_rp(total), fmt_rp_full(total))
+    c3.metric("Biaya / Ha", fmt_rp(rp_per_ha(p)))
+    c4.metric("Status Realisasi", "Tersedia" if real else "Belum ada")
 
-        st.markdown("#### Biaya per Periode (Catur Wulan)")
-        g = p["rencana"]["grand"]
-        keys = [pd_["key"] for pd_ in g["periods"]] if g else []
-        rencana_vals = [pd_["biaya"] for pd_ in g["periods"]] if g else []
-        fig3 = go.Figure()
-        fig3.add_bar(name="Rencana", x=keys, y=rencana_vals, marker_color=FOREST)
-        if real and p["realisasi"]["data"]["grand"]:
-            rmap = {pd_["key"]: pd_["biaya"] for pd_ in p["realisasi"]["data"]["grand"]["periods"]}
-            fig3.add_bar(name="Realisasi", x=keys, y=[rmap.get(k, 0) for k in keys], marker_color=GOLD)
-        fig3.update_layout(barmode="group", height=320, margin=dict(l=10, r=10, t=10, b=10),
-                            plot_bgcolor="white", paper_bgcolor="white", legend=dict(orientation="h", y=-0.2))
-        st.plotly_chart(fig3, use_container_width=True, key=f"biaya_{p['id']}")
-
-        st.markdown("#### Komposisi Biaya per Pekerjaan")
-        items = [it for it in p["rencana"]["items"] if it["biaya_rencana"]]
-        items = sorted(items, key=lambda x: -x["biaya_rencana"])
-        fig4 = px.pie(
-            names=[it["nama"] for it in items],
-            values=[it["biaya_rencana"] for it in items],
-            color_discrete_sequence=PALETTE, hole=0.55,
+    if not real:
+        st.markdown(
+            """<div class="footnote">📋 File ini belum berisi data realisasi (kolom/sheet "Realisasi" tidak
+            terdeteksi). Tambahkan sheet baru bernama mengandung kata <b>Realisasi</b> dengan struktur tabel
+            yang mirip sheet RKP, lalu upload ulang — dashboard otomatis akan menampilkan perbandingan
+            Rencana vs Realisasi di sini.</div>""",
+            unsafe_allow_html=True,
         )
-        fig4.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10))
-        st.plotly_chart(fig4, use_container_width=True, key=f"comp_{p['id']}")
 
-        st.markdown("#### Rincian Pekerjaan")
-        real_map = {}
-        if real:
-            for it in p["realisasi"]["data"]["items"]:
-                real_map[it["nama"]] = it["biaya_rencana"]
+    st.markdown("#### Biaya per Periode (Catur Wulan)")
+    g = p["rencana"]["grand"]
+    keys = [pd_["key"] for pd_ in g["periods"]] if g else []
+    rencana_vals = [pd_["biaya"] for pd_ in g["periods"]] if g else []
+    fig3 = go.Figure()
+    fig3.add_bar(name="Rencana", x=keys, y=rencana_vals, marker_color=FOREST)
+    if real and p["realisasi"]["data"]["grand"]:
+        rmap = {pd_["key"]: pd_["biaya"] for pd_ in p["realisasi"]["data"]["grand"]["periods"]}
+        fig3.add_bar(name="Realisasi", x=keys, y=[rmap.get(k, 0) for k in keys], marker_color=GOLD)
+    fig3.update_layout(barmode="group", height=320, margin=dict(l=10, r=10, t=10, b=10),
+                        plot_bgcolor="white", paper_bgcolor="white", legend=dict(orientation="h", y=-0.2))
+    st.plotly_chart(fig3, use_container_width=True, key=f"biaya_{p['id']}")
 
-        rows_table = []
-        for it in p["rencana"]["items"]:
-            r_biaya = real_map.get(it["nama"])
-            capaian = (r_biaya / it["biaya_rencana"] * 100) if (real and r_biaya and it["biaya_rencana"]) else None
-            rows_table.append({
-                "No": it["no"],
-                "Pekerjaan": it["nama"],
-                "Volume (Ha)": it["volume_ha"],
-                "Biaya Rencana": it["biaya_rencana"],
-                "Rp / Ha": it["rp_per_ha"],
-                "Realisasi Biaya": r_biaya if real else None,
-                "% Capaian": round(capaian, 1) if capaian is not None else None,
-            })
-        df = pd.DataFrame(rows_table)
-        st.dataframe(
-            df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Volume (Ha)": st.column_config.NumberColumn(format="%.2f"),
-                "Biaya Rencana": st.column_config.NumberColumn(format="Rp %d"),
-                "Rp / Ha": st.column_config.NumberColumn(format="Rp %d"),
-                "Realisasi Biaya": st.column_config.NumberColumn(format="Rp %d"),
-                "% Capaian": st.column_config.NumberColumn(format="%.1f%%"),
-            },
-        )
+    st.markdown("#### Komposisi Biaya per Pekerjaan")
+    items = [it for it in p["rencana"]["items"] if it["biaya_rencana"]]
+    items = sorted(items, key=lambda x: -x["biaya_rencana"])
+    fig4 = px.pie(
+        names=[it["nama"] for it in items],
+        values=[it["biaya_rencana"] for it in items],
+        color_discrete_sequence=PALETTE, hole=0.55,
+    )
+    fig4.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10))
+    st.plotly_chart(fig4, use_container_width=True, key=f"comp_{p['id']}")
+
+    st.markdown("#### Rincian Pekerjaan")
+    real_map = {}
+    if real:
+        for it in p["realisasi"]["data"]["items"]:
+            real_map[it["nama"]] = it["biaya_rencana"]
+
+    rows_table = []
+    for it in p["rencana"]["items"]:
+        r_biaya = real_map.get(it["nama"])
+        capaian = (r_biaya / it["biaya_rencana"] * 100) if (real and r_biaya and it["biaya_rencana"]) else None
+        rows_table.append({
+            "No": it["no"],
+            "Pekerjaan": it["nama"],
+            "Volume (Ha)": it["volume_ha"],
+            "Biaya Rencana": it["biaya_rencana"],
+            "Rp / Ha": it["rp_per_ha"],
+            "Realisasi Biaya": r_biaya if real else None,
+            "% Capaian": round(capaian, 1) if capaian is not None else None,
+        })
+    df = pd.DataFrame(rows_table)
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Volume (Ha)": st.column_config.NumberColumn(format="%.2f"),
+            "Biaya Rencana": st.column_config.NumberColumn(format="Rp %d"),
+            "Rp / Ha": st.column_config.NumberColumn(format="Rp %d"),
+            "Realisasi Biaya": st.column_config.NumberColumn(format="Rp %d"),
+            "% Capaian": st.column_config.NumberColumn(format="%.1f%%"),
+        },
+    )
