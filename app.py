@@ -451,7 +451,38 @@ with st.sidebar:
                 st.rerun()
 
 # Gabungkan: data dari repo GitHub (utama) + file uji coba sesi (opsional, menimpa nama file yang sama)
-projects = {**repo_projects, **st.session_state.session_projects}
+projects_all = {**repo_projects, **st.session_state.session_projects}
+
+# ============================================================
+# SIDEBAR — FILTER
+# ============================================================
+projects = projects_all
+if projects_all:
+    with st.sidebar:
+        st.divider()
+        st.markdown("#### 🔎 Filter")
+
+        companies = sorted({p["meta"]["company"] for p in projects_all.values()})
+        selected_companies = st.multiselect(
+            "Perusahaan", companies, default=companies, key="filter_company"
+        )
+
+        projects_by_company = {
+            k: v for k, v in projects_all.items() if v["meta"]["company"] in selected_companies
+        }
+
+        project_names = sorted({p["meta"]["name"] for p in projects_by_company.values()})
+        selected_projects = st.multiselect(
+            "Proyek", project_names, default=project_names, key="filter_project"
+        )
+
+        projects = {
+            k: v for k, v in projects_by_company.items() if v["meta"]["name"] in selected_projects
+        }
+
+        if projects_all and not projects:
+            st.warning("Tidak ada proyek yang cocok dengan filter ini.")
+
 
 # ============================================================
 # MAIN
@@ -459,11 +490,15 @@ projects = {**repo_projects, **st.session_state.session_projects}
 st.title("🌴 RKP Monitor")
 st.caption("Dashboard konsolidasi Rencana Kerja Proyek — banding biaya & capaian fisik lintas proyek.")
 
-if not projects:
+if not projects_all:
     st.info(
         "⬅️ Belum ada data. Tambahkan file `.xlsx` RKP ke folder **`data/`** di repo GitHub lalu "
         "commit, atau upload file uji coba lewat panel kiri untuk mulai memantau."
     )
+    st.stop()
+
+if not projects:
+    st.warning("Tidak ada proyek yang cocok dengan filter Perusahaan/Proyek yang dipilih di sidebar. Coba longgarkan filternya.")
     st.stop()
 
 view = st.session_state.get("view", "overview")
