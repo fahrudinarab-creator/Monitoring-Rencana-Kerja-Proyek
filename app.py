@@ -6,6 +6,8 @@ Deploy: push ke GitHub lalu hubungkan repo di https://share.streamlit.io
 
 import re
 import io
+import hashlib
+from pathlib import Path
 from datetime import datetime
 
 import openpyxl
@@ -13,6 +15,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
+
+# Folder di repo GitHub tempat file .xlsx RKP disimpan.
+# Update dashboard = tambah/ganti file .xlsx di folder ini lalu commit ke GitHub.
+DATA_DIR = Path(__file__).parent / "data"
 
 # ============================================================
 # KONFIGURASI HALAMAN & TEMA
@@ -300,49 +306,94 @@ def all_period_keys(projects):
 
 
 # ============================================================
-# STATE
+# DATA DARI REPO GITHUB (folder data/)
 # ============================================================
-if "projects" not in st.session_state:
-    st.session_state.projects = {}  # keyed by file_name
+def _repo_cache_key():
+    """Kunci cache berbasis nama+ukuran+waktu-modifikasi file di folder data/.
+    Berubah otomatis begitu file di-update lewat GitHub -> cache re-parse."""
+    if not DATA_DIR.exists():
+        return "no-data-dir"
+    parts = []
+    for fp in sorted(DATA_DIR.glob("*.xlsx")):
+        stat = fp.stat()
+        parts.append(f"{fp.name}:{stat.st_mtime}:{stat.st_size}")
+    return hashlib.md5("|".join(parts).encode()).hexdigest()
+
+
+@st.cache_data(show_spinner="Membaca file RKP dari repo GitHub...")
+def load_repo_projects(_cache_key):
+    result = {}
+    errs = []
+    if not DATA_DIR.exists():
+        return result, errs
+    for fp in sorted(DATA_DIR.glob("*.xlsx")):
+        try:
+            parsed = parse_workbook(fp.read_bytes(), fp.name)
+            if "error" in parsed:
+                errs.append(f"{fp.name}: {parsed['error']}")
+                continue
+            result[parsed["id"]] = parsed
+        except Exception as e:
+            errs.append(f"{fp.name}: gagal dibaca ({e})")
+    return result, errs
+
 
 # ============================================================
-# SIDEBAR — UPLOAD
+# STATE
+# ============================================================
+if "session_projects" not in st.session_state:
+    st.session_state.session_projects = {}  # file uji coba sementara (tidak permanen)
+
+repo_projects, repo_errs = load_repo_projects(_repo_cache_key())
+
+# ============================================================
+# SIDEBAR
 # ============================================================
 with st.sidebar:
     st.markdown("### 🌴 RKP Monitor")
-    st.caption("Upload file Excel Rencana Kerja Proyek (.xlsx). Bisa lebih dari satu sekaligus.")
-    uploaded = st.file_uploader("Upload file RKP", type=["xlsx"], accept_multiple_files=True, label_visibility="collapsed")
 
-    if uploaded:
-        ok, errs = 0, []
-        for f in uploaded:
-            try:
-                result = parse_workbook(f.read(), f.name)
-                if "error" in result:
-                    errs.append(f"{f.name}: {result['error']}")
-                    continue
-                st.session_state.projects[result["id"]] = result
-                ok += 1
-            except Exception as e:
-                errs.append(f"{f.name}: gagal dibaca ({e})")
-        if ok:
-            st.success(f"{ok} file berhasil diproses.")
-        for e in errs:
-            st.warning(e)
+    if repo_projects:
+        st.success(f"📁 {len(repo_projects)} file RKP dimuat dari repo GitHub (folder `data/`)")
+    elif DATA_DIR.exists():
+        st.warning("Folder `data/` ada tapi belum berisi file .xlsx.")
+    else:
+        st.info("Folder `data/` belum ada di repo. Lihat README untuk cara menambahkannya.")
+    for e in repo_errs:
+        st.warning(e)
 
-    if st.session_state.projects:
-        st.divider()
-        st.caption(f"{len(st.session_state.projects)} proyek dimuat di sesi ini")
-        if st.button("🗑 Hapus semua data", use_container_width=True):
-            st.session_state.projects = {}
-            st.rerun()
-        st.caption(
-            "⚠️ Data hanya tersimpan selama sesi browser ini berlangsung. "
-            "Refresh halaman = upload ulang. Untuk penyimpanan permanen lintas sesi, "
-            "hubungkan database (lihat README)."
-        )
+    if st.button("🔄 Muat ulang data dari GitHub", use_container_width=True):
+        load_repo_projects.clear()
+        st.rerun()
 
-projects = st.session_state.projects
+    st.divider()
+    st.caption("Untuk update data secara permanen: ganti/tambah file `.xlsx` di folder `data/` pada repo GitHub, lalu commit — dashboard otomatis membaca versi terbaru dalam beberapa menit.")
+
+    with st.expander("🧪 Uji coba file lain (sementara, tidak permanen)"):
+        uploaded = st.file_uploader("Upload file RKP", type=["xlsx"], accept_multiple_files=True, label_visibility="collapsed")
+        if uploaded:
+            ok, errs = 0, []
+            for f in uploaded:
+                try:
+                    result = parse_workbook(f.read(), f.name)
+                    if "error" in result:
+                        errs.append(f"{f.name}: {result['error']}")
+                        continue
+                    st.session_state.session_projects[result["id"]] = result
+                    ok += 1
+                except Exception as e:
+                    errs.append(f"{f.name}: gagal dibaca ({e})")
+            if ok:
+                st.success(f"{ok} file berhasil diproses (sesi ini saja).")
+            for e in errs:
+                st.warning(e)
+        if st.session_state.session_projects:
+            st.caption(f"{len(st.session_state.session_projects)} file uji coba aktif")
+            if st.button("Hapus file uji coba", use_container_width=True):
+                st.session_state.session_projects = {}
+                st.rerun()
+
+# Gabungkan: data dari repo GitHub (utama) + file uji coba sesi (opsional, menimpa nama file yang sama)
+projects = {**repo_projects, **st.session_state.session_projects}
 
 # ============================================================
 # MAIN
@@ -351,7 +402,10 @@ st.title("🌴 RKP Monitor")
 st.caption("Dashboard konsolidasi Rencana Kerja Proyek — banding biaya & capaian fisik lintas proyek.")
 
 if not projects:
-    st.info("⬅️ Upload file RKP (.xlsx) lewat panel di sebelah kiri untuk mulai memantau.")
+    st.info(
+        "⬅️ Belum ada data. Tambahkan file `.xlsx` RKP ke folder **`data/`** di repo GitHub lalu "
+        "commit, atau upload file uji coba lewat panel kiri untuk mulai memantau."
+    )
     st.stop()
 
 view = st.session_state.get("view", "overview")
