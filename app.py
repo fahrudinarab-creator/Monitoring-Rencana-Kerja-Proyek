@@ -538,8 +538,11 @@ if selected_view == "📊 Ringkasan":
         text=[fmt_rp(v) for v in vals], textposition="outside",
     ))
     fig.update_layout(height=100 + 60 * len(names), margin=dict(l=10, r=10, t=10, b=10),
-                       xaxis_title="Rp", plot_bgcolor="white", paper_bgcolor="white")
-    st.plotly_chart(fig, use_container_width=True)
+                       xaxis_title="Rp", plot_bgcolor="white", paper_bgcolor="white",
+                       font=dict(color="#1B2A1E", size=13),
+                       xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
+                       yaxis=dict(color="#1B2A1E"))
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
     st.markdown("#### Target Fisik per Periode (Catur Wulan) — Semua Proyek")
     keys = all_period_keys(projects)
@@ -551,8 +554,11 @@ if selected_view == "📊 Ringkasan":
                      marker_color=PALETTE[i % len(PALETTE)])
     fig2.update_layout(barmode="stack", height=380, margin=dict(l=10, r=10, t=10, b=10),
                         yaxis_title="Ha", plot_bgcolor="white", paper_bgcolor="white",
-                        legend=dict(orientation="h", y=-0.2))
-    st.plotly_chart(fig2, use_container_width=True)
+                        legend=dict(orientation="h", y=-0.2, font=dict(color="#1B2A1E")),
+                        font=dict(color="#1B2A1E", size=13),
+                        xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
+                        yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"))
+    st.plotly_chart(fig2, use_container_width=True, theme=None)
 
     st.markdown("#### Daftar Proyek")
     cols = st.columns(3)
@@ -622,8 +628,12 @@ else:
         rmap = {pd_["key"]: pd_["biaya"] for pd_ in p["realisasi"]["data"]["grand"]["periods"]}
         fig3.add_bar(name="Realisasi", x=keys, y=[rmap.get(k, 0) for k in keys], marker_color=GOLD)
     fig3.update_layout(barmode="group", height=320, margin=dict(l=10, r=10, t=10, b=10),
-                        plot_bgcolor="white", paper_bgcolor="white", legend=dict(orientation="h", y=-0.2))
-    st.plotly_chart(fig3, use_container_width=True, key=f"biaya_{p['id']}")
+                        plot_bgcolor="white", paper_bgcolor="white",
+                        legend=dict(orientation="h", y=-0.2, font=dict(color="#1B2A1E")),
+                        font=dict(color="#1B2A1E", size=13),
+                        xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
+                        yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"))
+    st.plotly_chart(fig3, use_container_width=True, key=f"biaya_{p['id']}", theme=None)
 
     st.markdown("#### Komposisi Biaya per Pekerjaan")
     items = [it for it in p["rencana"]["items"] if it["biaya_rencana"]]
@@ -633,8 +643,12 @@ else:
         values=[it["biaya_rencana"] for it in items],
         color_discrete_sequence=PALETTE, hole=0.55,
     )
-    fig4.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10))
-    st.plotly_chart(fig4, use_container_width=True, key=f"comp_{p['id']}")
+    fig4.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10),
+                        plot_bgcolor="white", paper_bgcolor="white",
+                        font=dict(color="#1B2A1E", size=13),
+                        legend=dict(font=dict(color="#1B2A1E")))
+    fig4.update_traces(textfont=dict(color="#1B2A1E"))
+    st.plotly_chart(fig4, use_container_width=True, key=f"comp_{p['id']}", theme=None)
 
     st.markdown("#### Rincian Pekerjaan")
     real_map = {}
