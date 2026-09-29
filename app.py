@@ -1244,46 +1244,51 @@ if section == "📊 Ringkasan Portofolio":
     c2.metric("Nilai Proyek", fmt_rp(total_biaya), fmt_rp_full(total_biaya))
 
     st.markdown("#### Rekap Proyek — Biaya vs Realisasi")
-    st.caption("Pilih proyek dari daftar lalu klik \"Lihat Detail\" untuk membuka detailnya.")
+    st.caption("Untuk lihat detail satu proyek, klik ikon \"Detail Proyek\" di kanan atas lalu pilih proyeknya.")
 
     col_l, col_r = st.columns([2, 1])
     with col_l:
-        recap_rows = [
-            {
-                "Proyek": p["meta"]["name"],
-                "Perusahaan": p["meta"]["company"],
-                "Biaya Rencana": fmt_rp_full(total_rencana(p)),
-                "Realisasi": fmt_rp_full(realisasi_total(p)),
-                "Capaian (%)": f"{capaian_biaya_pct(p):.1f}%" if capaian_biaya_pct(p) is not None else "—",
-            }
-            for p in projects.values()
-        ]
-        recap_df = pd.DataFrame(recap_rows)
-        st.dataframe(recap_df, use_container_width=True, hide_index=True, height=380)
-
-        pick_col, btn_col = st.columns([3, 1])
-        proj_names_f1 = [p["meta"]["name"] for p in projects.values()]
-        with pick_col:
-            picked = st.selectbox("Pilih proyek", proj_names_f1, key="f1_picked_project", label_visibility="collapsed")
-        with btn_col:
-            if st.button("Lihat Detail", use_container_width=True, icon=":material/arrow_forward:"):
-                st.session_state["detail_project"] = picked
-                st.session_state["_pending_section"] = "📁 Detail Proyek"
-                st.rerun()
+        with st.container(border=True):
+            recap_rows = [
+                {
+                    "Proyek": p["meta"]["name"],
+                    "Perusahaan": p["meta"]["company"],
+                    "Biaya Rencana": fmt_rp_full(total_rencana(p)),
+                    "Realisasi": fmt_rp_full(realisasi_total(p)),
+                    "Capaian (%)": f"{capaian_biaya_pct(p):.1f}%" if capaian_biaya_pct(p) is not None else "—",
+                }
+                for p in projects.values()
+            ]
+            recap_df = pd.DataFrame(recap_rows)
+            st.dataframe(
+                recap_df, use_container_width=True, hide_index=True, height=380,
+                column_config={
+                    "Proyek": st.column_config.TextColumn(width="medium"),
+                    "Perusahaan": st.column_config.TextColumn(width="medium"),
+                    "Biaya Rencana": st.column_config.TextColumn(alignment="right"),
+                    "Realisasi": st.column_config.TextColumn(alignment="right"),
+                    "Capaian (%)": st.column_config.TextColumn(alignment="right", width="small"),
+                },
+            )
 
     with col_r:
-        st.markdown("##### Proyek per Perusahaan")
-        by_company = {}
-        for p in projects.values():
-            by_company[p["meta"]["company"]] = by_company.get(p["meta"]["company"], 0) + 1
-        fig_pie = go.Figure(go.Pie(
-            labels=list(by_company.keys()), values=list(by_company.values()), hole=0.45,
-            marker=dict(colors=PALETTE[:len(by_company)]),
-            textinfo="label+value", textfont=dict(color="#C9D1D9", size=11),
-        ))
-        fig_pie.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
-                               paper_bgcolor="#141A26")
-        st.plotly_chart(fig_pie, use_container_width=True, theme=None)
+        with st.container(border=True):
+            st.markdown("##### Proyek per Perusahaan")
+            by_company = {}
+            for p in projects.values():
+                by_company[p["meta"]["company"]] = by_company.get(p["meta"]["company"], 0) + 1
+            fig_pie = go.Figure(go.Pie(
+                labels=list(by_company.keys()), values=list(by_company.values()), hole=0.55,
+                marker=dict(colors=PALETTE[:len(by_company)], line=dict(color="#141A26", width=3)),
+                textinfo="value", textfont=dict(color="#0B0F17", size=13, family="Inter"),
+                textposition="inside",
+            ))
+            fig_pie.update_layout(
+                height=460, margin=dict(l=10, r=10, t=10, b=10),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                legend=dict(orientation="h", y=-0.08, font=dict(color="#C9D1D9", size=11)),
+            )
+            st.plotly_chart(fig_pie, use_container_width=True, theme=None)
 
     unreliable_names = [p["meta"]["name"] for p in projects.values() if not p["rencana"].get("items_reliable", True)]
     no_real_count = sum(1 for p in projects.values() if not has_any_realisasi(p))
