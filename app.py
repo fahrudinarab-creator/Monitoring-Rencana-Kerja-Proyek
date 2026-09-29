@@ -29,6 +29,7 @@ ENABLE_REALISASI = False
 COMPANY_OVERRIDES = {
     "RKP_BIOGAS_SYSTEM__19_Feb_2026_.xlsx": "PT. Kumai Sentosa",
     "RKP_Proyek_Dermaga_-_PT__BKB_Tahap_II.xlsx": "PT. Buana Karya Bhakti",
+    "Timeline_RKP_Kandang_Fattening___RPH_site.xlsx": "PT. Siskaranch",
 }
 
 # Penulisan nama perusahaan di berbagai file sumber tidak konsisten (ada/tidaknya titik,
@@ -43,6 +44,7 @@ CANONICAL_COMPANIES = {
     _company_key("PT FAST FOREST DEVELOPMENT"): "PT. Fast Forest Development",
     _company_key("PT FASS FOREST DEVELOPMENT"): "PT. Fast Forest Development",  # typo di file sumber
     _company_key("PT KUMAI SENTOSA"): "PT. Kumai Sentosa",
+    _company_key("PT SISKARANCH"): "PT. Siskaranch",
 }
 
 # Nama tampilan proyek yang diminta pengguna (menggantikan nama hasil parsing filename).
@@ -59,6 +61,7 @@ PROJECT_NAME_OVERRIDES = {
     "RKP_PLASMA_MANDIRI_SUCAB__300_Ha.xlsx": "Pembukaan Lahan Plasma Mandiri Sucab",
     "RKP_PASTURA_KEBUN_BKB_INTI_-_2026.xlsx": "Pastura Kebun BKB Inti",
     "RKP_PASTURA_KEBUN_FFD_INTI_-_2026.xlsx": "Pastura Kebun FFD Inti",
+    "Timeline_RKP_Kandang_Fattening___RPH_site.xlsx": "Kandang Fattening & RPH",
 }
 
 # ============================================================
@@ -490,6 +493,48 @@ def _items_reliable(items, grand_biaya):
     return abs(s - grand_biaya) <= 0.03 * abs(grand_biaya)
 
 
+def parse_timeline_rkp_rows(rows):
+    """Tipe 'timeline': daftar Pekerjaan (kolom A) + Biaya Rupiah (kolom di sebelahnya
+    yang headernya persis kata 'Rupiah'), tanpa header 'Pekerjaan/Item/Uraian' baku
+    (mis. template 'TIMELINE RKP' — kolom breakdown bulanannya biasanya kosong/template)."""
+    header_row, biaya_col = None, None
+    for r in range(min(len(rows), 15)):
+        row = rows[r]
+        for c, v in enumerate(row):
+            if norm(v) == "rupiah":
+                header_row, biaya_col = r, c
+                break
+        if header_row is not None:
+            break
+    if header_row is None:
+        return None
+    name_col = 0
+
+    items = []
+    for r in range(header_row + 1, len(rows)):
+        row = rows[r]
+        name = row[name_col] if name_col < len(row) else None
+        biaya = row[biaya_col] if biaya_col < len(row) else None
+        if not _is_leaf_label(name) or not isinstance(biaya, (int, float)):
+            continue
+        items.append(dict(no=None, nama=str(name).strip(), volume_ha=None,
+                           biaya_rencana=biaya, rp_per_ha=None, periods=[]))
+    if not items:
+        return None
+
+    total_rows = []
+    for r in range(header_row + 1, len(rows)):
+        row = rows[r]
+        name = row[name_col] if name_col < len(row) else None
+        biaya = row[biaya_col] if biaya_col < len(row) else None
+        if name and isinstance(biaya, (int, float)) and re.match(r"^(total|tatal|sub\s*total|grand\s*total|jumlah)\b", str(name).strip(), re.I):
+            total_rows.append(biaya)
+    grand_biaya = max(total_rows) if total_rows else sum(it["biaya_rencana"] for it in items)
+
+    return dict(items=items, grand=dict(volume_ha=None, biaya_rencana=grand_biaya, periods=[]),
+                items_reliable=_items_reliable(items, grand_biaya))
+
+
 def extract_meta(rows, file_name):
     company, desc, luas_text, periode_text = None, None, None, None
     for r in range(min(len(rows), 10)):
@@ -552,7 +597,9 @@ def try_parse_realisasi(wb):
 
 def _gather_rkp_sheet_candidates(sheetnames):
     """Urutan prioritas kandidat sheet utama: 'RKP' persis, lalu sheet berawalan 'RKP',
-    lalu sheet 'REKAP TAHUNAN' / 'REKAP PEKERJAAN' (format proyek konstruksi)."""
+    lalu sheet 'REKAP TAHUNAN' / 'REKAP PEKERJAAN' (format proyek konstruksi). Kalau tidak
+    ada satu pun yang cocok (mis. sheet cuma bernama 'Sheet1'), coba semua sheet sebagai
+    upaya terakhir — aman karena tetap harus lolos salah satu detektor format di bawah."""
     cands = []
     for n in sheetnames:
         if n.strip().upper() == "RKP" and n not in cands:
@@ -566,6 +613,8 @@ def _gather_rkp_sheet_candidates(sheetnames):
     for n in sheetnames:
         if re.search(r"rekap\s*pekerjaan", n, re.I) and n not in cands:
             cands.append(n)
+    if not cands:
+        cands = list(sheetnames)
     return cands
 
 
@@ -588,6 +637,10 @@ def parse_workbook(file_bytes, file_name):
             chosen_sheet, chosen_rows, rencana, fmt = sheet_name, rows, parsed, "tahunan"
             break
         parsed = parse_simple_list_rows(rows)
+        if parsed:
+            chosen_sheet, chosen_rows, rencana, fmt = sheet_name, rows, parsed, "sederhana"
+            break
+        parsed = parse_timeline_rkp_rows(rows)
         if parsed:
             chosen_sheet, chosen_rows, rencana, fmt = sheet_name, rows, parsed, "sederhana"
             break
@@ -768,23 +821,18 @@ def all_period_keys(projects):
 
 # ---------------- Jenis proyek (untuk pengelompokan) ----------------
 JENIS_COLORS = {
-    "Perkebunan / Tanaman": FOREST,
-    "Pastura": FOREST_LIGHT,
-    "Konstruksi": GOLD,
-    "Konstruksi / Non-Tanaman": RUST,
-    "Lainnya": "#7C9A85",
+    "Tanaman": FOREST,
+    "Infrastruktur": GOLD,
 }
 
 
 def project_jenis(p):
     fmt = p.get("format")
     if fmt == "periode":
-        return "Perkebunan / Tanaman"
-    if fmt == "tahunan":
-        return "Konstruksi"
-    if fmt == "sederhana":
-        return "Pastura" if luas_proj(p) else "Konstruksi / Non-Tanaman"
-    return "Lainnya"
+        return "Tanaman"
+    if fmt == "sederhana" and luas_proj(p):
+        return "Tanaman"
+    return "Infrastruktur"
 
 
 # ---------------- Periode "sekarang" & rentang tahun proyek ----------------
