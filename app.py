@@ -20,6 +20,10 @@ import streamlit as st
 # Update dashboard = tambah/ganti file .xlsx di folder ini lalu commit ke GitHub.
 DATA_DIR = Path(__file__).parent / "data"
 
+# Set True lagi setelah file/sheet Realisasi resmi mulai diupload — untuk sementara
+# dikosongkan dulu semua (semua proyek akan tampil status "Belum ada").
+ENABLE_REALISASI = False
+
 # ============================================================
 # KONFIGURASI HALAMAN & TEMA
 # ============================================================
@@ -560,14 +564,18 @@ def parse_workbook(file_bytes, file_name):
 
     meta = extract_meta(chosen_rows, file_name)
 
-    if fmt == "sederhana" and rencana.get("inline_realisasi_total") is not None:
+    # Realisasi dinonaktifkan sementara atas permintaan — dikosongkan dulu semua,
+    # nanti diaktifkan lagi setelah file/sheet realisasi resmi diupload terpisah.
+    if ENABLE_REALISASI and fmt == "sederhana" and rencana.get("inline_realisasi_total") is not None:
         total_real = rencana["inline_realisasi_total"]
         realisasi = dict(
             status="total_only",
             data=dict(items=[], grand=dict(volume_ha=None, biaya_rencana=total_real, periods=[])),
         )
-    else:
+    elif ENABLE_REALISASI:
         realisasi = try_parse_realisasi(wb)
+    else:
+        realisasi = dict(status="none")
 
     wb.close()
     return dict(id=file_name, file_name=file_name, updated_at=datetime.now().isoformat(),
