@@ -873,6 +873,24 @@ def project_year_range(p):
     return min(years), max(years)
 
 
+def project_time_progress_pct(p):
+    """Persentase waktu yang sudah lewat dari total durasi rencana proyek (berdasarkan
+    kalender), atau None kalau proyek tidak punya rentang tahun yang jelas."""
+    yr = project_year_range(p)
+    if not yr:
+        return None
+    start_y, end_y = yr
+    now = datetime.now()
+    frac_now = now.year + (now.month - 1) / 12
+    total_span = (end_y + 1) - start_y
+    if total_span <= 0:
+        return None
+    return max(0, min(100, (frac_now - start_y) / total_span * 100))
+
+
+SECTIONS = ["🏠 Beranda", "📋 Portofolio", "🏢 Per Perusahaan", "📁 Detail Proyek"]
+
+
 # ============================================================
 # DATA DARI REPO GITHUB (folder data/)
 # ============================================================
@@ -1002,11 +1020,16 @@ if projects_all:
             st.warning("Tidak ada proyek yang cocok dengan filter ini.")
 
         if projects:
-            st.markdown("#### 👁️ Tampilan")
-            view_options = ["📊 Ringkasan"] + [p["meta"]["name"] for p in projects.values()]
-            if st.session_state.get("view_select") not in view_options:
-                st.session_state["view_select"] = view_options[0]
-            st.selectbox("Pilih tampilan", view_options, key="view_select", label_visibility="collapsed")
+            st.markdown("#### 🧭 Navigasi")
+            if st.session_state.get("section") not in SECTIONS:
+                st.session_state["section"] = SECTIONS[0]
+            st.radio("Halaman", SECTIONS, key="section", label_visibility="collapsed")
+
+            if st.session_state["section"] == "📁 Detail Proyek":
+                proj_names = [p["meta"]["name"] for p in projects.values()]
+                if st.session_state.get("detail_project") not in proj_names:
+                    st.session_state["detail_project"] = proj_names[0]
+                st.selectbox("Pilih proyek", proj_names, key="detail_project")
 
 
 # ============================================================
@@ -1026,12 +1049,107 @@ if not projects:
     st.warning("Tidak ada proyek yang cocok dengan filter Perusahaan/Proyek yang dipilih di sidebar. Coba longgarkan filternya.")
     st.stop()
 
-selected_view = st.session_state.get("view_select", "📊 Ringkasan")
+section = st.session_state.get("section", SECTIONS[0])
+
+
+def _go_section(name):
+    st.session_state["section"] = name
+
 
 # ================================================================
-# RINGKASAN (semua proyek terfilter)
+# BERANDA (ringkasan eksekutif)
 # ================================================================
-if selected_view == "📊 Ringkasan":
+if section == "🏠 Beranda":
+    total_biaya = sum((total_rencana(p) or 0) for p in projects.values())
+    total_luas = sum((luas_proj(p) or 0) for p in projects.values())
+    n_real = sum(1 for p in projects.values() if has_any_realisasi(p))
+    by_jenis = {}
+    for p in projects.values():
+        by_jenis[project_jenis(p)] = by_jenis.get(project_jenis(p), 0) + (total_rencana(p) or 0)
+
+    st.caption(f"{len(projects)} proyek terfilter · diperbarui {datetime.now().strftime('%d %b %Y')}")
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total Investasi Portofolio", fmt_rp(total_biaya), fmt_rp_full(total_biaya))
+    c2.metric("Total Luas Tanam", fmt_ha(total_luas))
+    tanaman_pct = (by_jenis.get("Tanaman", 0) / total_biaya * 100) if total_biaya else 0
+    c3.metric("Tanaman vs Infrastruktur", f"{tanaman_pct:.0f}% / {100-tanaman_pct:.0f}%")
+    c4.metric("Cakupan Realisasi", f"{n_real} / {len(projects)}", "menunggu upload data realisasi" if n_real == 0 else None)
+
+    unreliable_names = [p["meta"]["name"] for p in projects.values() if not p["rencana"].get("items_reliable", True)]
+    no_real_count = len(projects) - n_real
+    alerts = []
+    if unreliable_names:
+        alerts.append(f"<b>{len(unreliable_names)} proyek</b> rincian pekerjaannya belum bisa direkonsiliasi otomatis — {', '.join(unreliable_names)}. Total biaya proyeknya sendiri tetap akurat.")
+    if no_real_count:
+        alerts.append(f"<b>{no_real_count} dari {len(projects)} proyek</b> belum ada data realisasi. Upload sheet Realisasi resmi untuk mulai membandingkan Rencana vs Realisasi.")
+    if alerts:
+        st.markdown(
+            '<div class="footnote" style="background:#F5E4DA;">⚠️ &nbsp;' + '<br><br>⚠️ &nbsp;'.join(alerts) + '</div>',
+            unsafe_allow_html=True,
+        )
+
+    col_l, col_r = st.columns([1.4, 1])
+    with col_l:
+        st.markdown("#### Peringkat Semua Proyek Berdasarkan Nilai")
+        plist = sorted(projects.values(), key=lambda p: -(total_rencana(p) or 0))
+        names = [p["meta"]["name"] for p in plist]
+        vals = [total_rencana(p) or 0 for p in plist]
+        bar_colors = [JENIS_COLORS.get(project_jenis(p), "#7C9A85") for p in plist]
+        fig_rank = go.Figure(go.Bar(
+            x=vals, y=names, orientation="h", marker_color=bar_colors,
+            text=[fmt_rp(v) for v in vals], textposition="outside",
+        ))
+        fig_rank.update_layout(height=max(280, 42 * len(names)), margin=dict(l=10, r=60, t=10, b=10),
+                                xaxis_title="Rp", plot_bgcolor="white", paper_bgcolor="white",
+                                font=dict(color="#1B2A1E", size=12),
+                                xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
+                                yaxis=dict(color="#1B2A1E", automargin=True, categoryorder="array", categoryarray=names[::-1]))
+        st.plotly_chart(fig_rank, use_container_width=True, theme=None)
+
+    with col_r:
+        st.markdown("#### Distribusi per Jenis")
+        fig_donut = go.Figure(go.Pie(
+            labels=list(by_jenis.keys()), values=list(by_jenis.values()), hole=0.6,
+            marker=dict(colors=[JENIS_COLORS.get(j, "#7C9A85") for j in by_jenis]),
+            textinfo="label+percent", textfont=dict(color="#1B2A1E", size=12),
+        ))
+        fig_donut.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10),
+                                 showlegend=False, paper_bgcolor="white")
+        st.plotly_chart(fig_donut, use_container_width=True, theme=None)
+
+        st.markdown("#### Per Perusahaan")
+        by_company = {}
+        for p in projects.values():
+            by_company[p["meta"]["company"]] = by_company.get(p["meta"]["company"], 0) + (total_rencana(p) or 0)
+        fig_comp = go.Figure(go.Bar(
+            x=list(by_company.values()), y=list(by_company.keys()), orientation="h",
+            marker_color=PALETTE[:len(by_company)],
+            text=[fmt_rp(v) for v in by_company.values()], textposition="outside",
+        ))
+        fig_comp.update_layout(height=max(140, 50 * len(by_company)), margin=dict(l=10, r=60, t=10, b=10),
+                                plot_bgcolor="white", paper_bgcolor="white",
+                                font=dict(color="#1B2A1E", size=12),
+                                xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
+                                yaxis=dict(color="#1B2A1E", automargin=True))
+        st.plotly_chart(fig_comp, use_container_width=True, theme=None)
+
+    st.markdown("#### Jelajahi Lebih Lanjut")
+    b1, b2, b3 = st.columns(3)
+    with b1:
+        st.button("📋 Portofolio", use_container_width=True, on_click=_go_section, args=("📋 Portofolio",))
+        st.caption("Tabel lengkap semua proyek, bisa diurut & difilter")
+    with b2:
+        st.button("🏢 Per Perusahaan", use_container_width=True, on_click=_go_section, args=("🏢 Per Perusahaan",))
+        st.caption("Rekap investasi & daftar proyek tiap perusahaan")
+    with b3:
+        st.button("📁 Detail Proyek", use_container_width=True, on_click=_go_section, args=("📁 Detail Proyek",))
+        st.caption("Jadwal, Kurva-S, rincian pekerjaan per proyek")
+
+# ================================================================
+# PORTOFOLIO (dulu "Ringkasan": tabel + grafik semua proyek terfilter)
+# ================================================================
+elif section == "📋 Portofolio":
     total_biaya = sum((total_rencana(p) or 0) for p in projects.values())
     total_luas = sum((luas_proj(p) or 0) for p in projects.values())
     avg_rp_ha = total_biaya / total_luas if total_luas else None
@@ -1067,6 +1185,31 @@ if selected_view == "📊 Ringkasan":
     c2.metric("Total Luas", fmt_ha(total_luas))
     c3.metric("Total Biaya Rencana", fmt_rp(total_biaya), fmt_rp_full(total_biaya))
     c4.metric("Rata-rata Biaya / Ha", fmt_rp(avg_rp_ha))
+
+    st.markdown("#### Tabel Proyek")
+    st.caption("Klik header kolom untuk mengurutkan.")
+    table_df = pd.DataFrame([
+        {
+            "Proyek": p["meta"]["name"],
+            "Perusahaan": p["meta"]["company"],
+            "Jenis": project_jenis(p),
+            "Luas (Ha)": luas_proj(p),
+            "Total Biaya": total_rencana(p),
+            "Biaya / Ha": rp_per_ha(p),
+            "Progres Waktu (%)": project_time_progress_pct(p),
+            "Status Realisasi": "Tersedia" if has_realisasi(p) else ("Total saja" if has_any_realisasi(p) else "Belum ada"),
+        }
+        for p in projects.values()
+    ])
+    st.dataframe(
+        table_df, use_container_width=True, hide_index=True,
+        column_config={
+            "Luas (Ha)": st.column_config.NumberColumn(format="%.2f"),
+            "Total Biaya": st.column_config.NumberColumn(format="Rp %d"),
+            "Biaya / Ha": st.column_config.NumberColumn(format="Rp %d"),
+            "Progres Waktu (%)": st.column_config.ProgressColumn(format="%.0f%%", min_value=0, max_value=100),
+        },
+    )
 
     st.markdown("#### Perbandingan Biaya Antar Proyek")
     st.caption("Warna batang menandakan Jenis Proyek — lihat legenda di bawah grafik.")
@@ -1241,9 +1384,50 @@ if selected_view == "📊 Ringkasan":
             )
 
 # ================================================================
+# PER PERUSAHAAN
+# ================================================================
+elif section == "🏢 Per Perusahaan":
+    companies = sorted({p["meta"]["company"] for p in projects.values()})
+    st.caption(f"{len(companies)} perusahaan pada filter saat ini.")
+
+    for c in companies:
+        comp_projects = [p for p in projects.values() if p["meta"]["company"] == c]
+        total_c = sum(total_rencana(p) or 0 for p in comp_projects)
+        luas_c = sum(luas_proj(p) or 0 for p in comp_projects)
+        n_real_c = sum(1 for p in comp_projects if has_any_realisasi(p))
+
+        st.markdown(f"### {c}")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Jumlah Proyek", len(comp_projects), f"{n_real_c} dengan realisasi")
+        c2.metric("Total Biaya", fmt_rp(total_c), fmt_rp_full(total_c))
+        c3.metric("Total Luas", fmt_ha(luas_c))
+
+        comp_df = pd.DataFrame([
+            {
+                "Proyek": p["meta"]["name"],
+                "Jenis": project_jenis(p),
+                "Luas (Ha)": luas_proj(p),
+                "Total Biaya": total_rencana(p),
+                "Biaya / Ha": rp_per_ha(p),
+                "Status Realisasi": "Tersedia" if has_realisasi(p) else ("Total saja" if has_any_realisasi(p) else "Belum ada"),
+            }
+            for p in sorted(comp_projects, key=lambda p: -(total_rencana(p) or 0))
+        ])
+        st.dataframe(
+            comp_df, use_container_width=True, hide_index=True,
+            column_config={
+                "Luas (Ha)": st.column_config.NumberColumn(format="%.2f"),
+                "Total Biaya": st.column_config.NumberColumn(format="Rp %d"),
+                "Biaya / Ha": st.column_config.NumberColumn(format="Rp %d"),
+            },
+        )
+        st.divider()
+
+# ================================================================
 # DETAIL SATU PROYEK (dipilih lewat dropdown sidebar)
 # ================================================================
-else:
+elif section == "📁 Detail Proyek":
+    selected_view = st.session_state.get("detail_project")
     p = next((pp for pp in projects.values() if pp["meta"]["name"] == selected_view), None)
     if p is None:
         st.warning("Proyek tidak ditemukan pada hasil filter saat ini. Kembali ke Ringkasan.")
