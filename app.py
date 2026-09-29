@@ -205,25 +205,27 @@ st.markdown(
     .footnote {{ background:#DFF2EF; border-radius:12px; padding:14px 16px; font-size:13px; color:#274943 !important; }}
     .footnote * {{ color:#274943 !important; }}
 
-    /* ---------- Hero band (Beranda) ---------- */
-    .hero-band {{
-        background: linear-gradient(120deg, {FOREST} 0%, #082E2A 100%);
-        border-radius: 22px; padding: 36px 40px; color: {IVORY};
-        display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px;
-        box-shadow: 0 20px 40px rgba(12,35,24,0.25);
-        position: relative; overflow: hidden;
+    /* ---------- Header bar ramping (Beranda) — mirip strip judul BI tool ---------- */
+    .hero-band-slim {{
+        background: linear-gradient(100deg, {FOREST} 0%, #082E2A 100%);
+        border-radius: 16px; padding: 18px 28px; color: {IVORY};
+        box-shadow: 0 10px 24px rgba(12,35,24,0.2);
     }}
-    .hero-band::after {{
-        content: ""; position: absolute; right: -60px; top: -60px; width: 220px; height: 220px;
-        border-radius: 50%; background: radial-gradient(circle, rgba(232,199,118,0.18), transparent 70%);
+    .hero-eyebrow {{ font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #9FCFC7; font-weight: 700; }}
+    .hero-title {{ font-family: 'Fraunces', serif; font-weight: 700; font-size: 24px; color: #FFFFFF; margin: 4px 0 0; }}
+
+    /* ---------- KPI strip: satu panel menyatu, bukan kartu terpisah-pisah ---------- */
+    .kpi-strip {{
+        display: flex; background: #FFFFFF; border: 1px solid #DCE8E5; border-radius: 16px;
+        margin-top: 14px; box-shadow: 0 1px 2px rgba(18,53,36,0.04), 0 8px 20px rgba(18,53,36,0.04);
+        overflow-x: auto;
     }}
-    .hero-eyebrow {{ font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #9FCFC7; font-weight: 700; margin: 0 0 10px; }}
-    .hero-number {{ font-family: 'Fraunces', serif; font-weight: 700; font-size: 52px; color: #FFFFFF; margin: 0; line-height: 1; }}
-    .hero-sub {{ font-size: 14px; color: #B8E0D9; margin: 10px 0 0; max-width: 440px; }}
-    .hero-split {{ display: flex; gap: 28px; flex-wrap: wrap; }}
-    .hero-split-item {{ text-align: right; }}
-    .hero-split-num {{ font-family: 'Fraunces', serif; font-size: 24px; font-weight: 700; color: #FFFFFF; }}
-    .hero-split-lbl {{ font-size: 11.5px; color: #9FCFC7; text-transform: uppercase; letter-spacing: 0.05em; }}
+    .kpi-strip-item {{
+        flex: 1; min-width: 130px; padding: 18px 20px; border-right: 1px solid #EDF3F1;
+    }}
+    .kpi-strip-item:last-child {{ border-right: none; }}
+    .kpi-strip-num {{ font-family: 'Fraunces', serif; font-weight: 700; font-size: 26px; color: {FOREST}; line-height: 1.1; }}
+    .kpi-strip-lbl {{ font-size: 11px; color: #6C7566; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; font-weight: 600; }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -1209,36 +1211,33 @@ if section == "🏠 Beranda":
 
     st.markdown(
         f"""
-        <div class="hero-band">
-          <div>
-            <p class="hero-eyebrow">🌴 Monitoring RKP &middot; {len(projects)} proyek terfilter</p>
-            <p class="hero-number">{fmt_rp(total_biaya)}</p>
-            <p class="hero-sub">Total investasi portofolio pada {datetime.now().strftime('%d %B %Y')} — {fmt_rp_full(total_biaya)}, dari {len(projects)} proyek di {len({p['meta']['company'] for p in projects.values()})} perusahaan.</p>
-          </div>
-          <div class="hero-split">
-            <div class="hero-split-item">
-              <div class="hero-split-num">{tanaman_pct:.0f}%</div>
-              <div class="hero-split-lbl">Tanaman</div>
-            </div>
-            <div class="hero-split-item">
-              <div class="hero-split-num">{100-tanaman_pct:.0f}%</div>
-              <div class="hero-split-lbl">Infrastruktur</div>
-            </div>
-            <div class="hero-split-item">
-              <div class="hero-split-num">{n_real}/{len(projects)}</div>
-              <div class="hero-split-lbl">Ada Realisasi</div>
-            </div>
-          </div>
+        <div class="hero-band-slim">
+          <p class="hero-eyebrow" style="margin:0">🌴 MONITORING RKP &middot; {len(projects)} PROYEK TERFILTER</p>
+          <p class="hero-title">Ringkasan Portofolio</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.write("")
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Luas Tanam", fmt_ha(total_luas))
-    c2.metric("Jumlah Proyek", len(projects))
-    c3.metric("Cakupan Realisasi", f"{n_real} / {len(projects)}", "menunggu upload data realisasi" if n_real == 0 else None)
+    kpi_items = [
+        (fmt_rp(total_biaya), "Total Investasi"),
+        (fmt_ha(total_luas), "Total Luas"),
+        (str(len(projects)), "Jumlah Proyek"),
+        (f"{tanaman_pct:.0f}%", "Tanaman"),
+        (f"{100-tanaman_pct:.0f}%", "Infrastruktur"),
+        (f"{n_real}/{len(projects)}", "Ada Realisasi"),
+    ]
+    st.markdown(
+        '<div class="kpi-strip">' +
+        "".join(
+            f'<div class="kpi-strip-item"><div class="kpi-strip-num">{val}</div>'
+            f'<div class="kpi-strip-lbl">{lbl}</div></div>'
+            for val, lbl in kpi_items
+        ) +
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    st.write("")
 
     unreliable_names = [p["meta"]["name"] for p in projects.values() if not p["rencana"].get("items_reliable", True)]
     no_real_count = len(projects) - n_real
