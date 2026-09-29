@@ -24,6 +24,27 @@ DATA_DIR = Path(__file__).parent / "data"
 # dikosongkan dulu semua (semua proyek akan tampil status "Belum ada").
 ENABLE_REALISASI = False
 
+# Koreksi manual nama perusahaan untuk file yang nama perusahaannya tidak tertulis
+# jelas di baris atas sheet (jadi tidak bisa dibaca otomatis oleh extract_meta).
+COMPANY_OVERRIDES = {
+    "RKP_BIOGAS_SYSTEM__19_Feb_2026_.xlsx": "PT. Kumai Sentosa",
+    "RKP_Proyek_Dermaga_-_PT__BKB_Tahap_II.xlsx": "PT. Buana Karya Bhakti",
+}
+
+# Penulisan nama perusahaan di berbagai file sumber tidak konsisten (ada/tidaknya titik,
+# huruf besar semua, typo "FASS" vs "FAST", dst) — disamakan di sini supaya tidak muncul
+# sebagai baris terpisah di filter Perusahaan padahal perusahaannya sama.
+def _company_key(s):
+    return re.sub(r"[.\s]+", " ", str(s).upper()).strip()
+
+
+CANONICAL_COMPANIES = {
+    _company_key("PT BUANA KARYA BHAKTI"): "PT. Buana Karya Bhakti",
+    _company_key("PT FAST FOREST DEVELOPMENT"): "PT. Fast Forest Development",
+    _company_key("PT FASS FOREST DEVELOPMENT"): "PT. Fast Forest Development",  # typo di file sumber
+    _company_key("PT KUMAI SENTOSA"): "PT. Kumai Sentosa",
+}
+
 # ============================================================
 # KONFIGURASI HALAMAN & TEMA
 # ============================================================
@@ -563,6 +584,9 @@ def parse_workbook(file_bytes, file_name):
         ))
 
     meta = extract_meta(chosen_rows, file_name)
+    if file_name in COMPANY_OVERRIDES:
+        meta["company"] = COMPANY_OVERRIDES[file_name]
+    meta["company"] = CANONICAL_COMPANIES.get(_company_key(meta["company"]), meta["company"])
 
     # Realisasi dinonaktifkan sementara atas permintaan — dikosongkan dulu semua,
     # nanti diaktifkan lagi setelah file/sheet realisasi resmi diupload terpisah.
