@@ -1244,7 +1244,7 @@ if section == "📊 Ringkasan Portofolio":
     c2.metric("Nilai Proyek", fmt_rp(total_biaya), fmt_rp_full(total_biaya))
 
     st.markdown("#### Rekap Proyek — Biaya vs Realisasi")
-    st.caption("Klik satu baris untuk membuka detail proyek itu.")
+    st.caption("Pilih proyek dari daftar lalu klik \"Lihat Detail\" untuk membuka detailnya.")
 
     col_l, col_r = st.columns([2, 1])
     with col_l:
@@ -1252,33 +1252,24 @@ if section == "📊 Ringkasan Portofolio":
             {
                 "Proyek": p["meta"]["name"],
                 "Perusahaan": p["meta"]["company"],
-                "Biaya Rencana": total_rencana(p),
-                "Realisasi": realisasi_total(p),
-                "Capaian (%)": capaian_biaya_pct(p),
+                "Biaya Rencana": fmt_rp_full(total_rencana(p)),
+                "Realisasi": fmt_rp_full(realisasi_total(p)),
+                "Capaian (%)": f"{capaian_biaya_pct(p):.1f}%" if capaian_biaya_pct(p) is not None else "—",
             }
             for p in projects.values()
         ]
         recap_df = pd.DataFrame(recap_rows)
-        recap_df["Biaya Rencana"] = pd.to_numeric(recap_df["Biaya Rencana"])
-        recap_df["Realisasi"] = pd.to_numeric(recap_df["Realisasi"])
-        recap_df["Capaian (%)"] = pd.to_numeric(recap_df["Capaian (%)"])
-        event = st.dataframe(
-            recap_df, use_container_width=True, hide_index=True, height=420,
-            column_config={
-                "Biaya Rencana": st.column_config.NumberColumn(format="Rp %d"),
-                "Realisasi": st.column_config.NumberColumn(format="Rp %d"),
-                "Capaian (%)": st.column_config.NumberColumn(format="%.1f%%"),
-            },
-            on_select="rerun", selection_mode="single-row", key="recap_table",
-        )
-        try:
-            sel_rows = event.selection.rows
-        except Exception:
-            sel_rows = []
-        if sel_rows:
-            st.session_state["detail_project"] = recap_df.iloc[sel_rows[0]]["Proyek"]
-            st.session_state["_pending_section"] = "📁 Detail Proyek"
-            st.rerun()
+        st.dataframe(recap_df, use_container_width=True, hide_index=True, height=380)
+
+        pick_col, btn_col = st.columns([3, 1])
+        proj_names_f1 = [p["meta"]["name"] for p in projects.values()]
+        with pick_col:
+            picked = st.selectbox("Pilih proyek", proj_names_f1, key="f1_picked_project", label_visibility="collapsed")
+        with btn_col:
+            if st.button("Lihat Detail", use_container_width=True, icon=":material/arrow_forward:"):
+                st.session_state["detail_project"] = picked
+                st.session_state["_pending_section"] = "📁 Detail Proyek"
+                st.rerun()
 
     with col_r:
         st.markdown("##### Proyek per Perusahaan")
