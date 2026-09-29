@@ -45,6 +45,21 @@ CANONICAL_COMPANIES = {
     _company_key("PT KUMAI SENTOSA"): "PT. Kumai Sentosa",
 }
 
+# Nama tampilan proyek yang diminta pengguna (menggantikan nama hasil parsing filename).
+PROJECT_NAME_OVERRIDES = {
+    "RKP_Teluk_Pulai_Kumai_Sentosa__06_Maret_2026_.xlsx": "Pembukaan Lahan Teluk Pulai",
+    "RKP_Replanting_BKB_Inti__PT__Buana_Karya_Bhakti_.xlsx": "Replanting BKB Inti",
+    "RKP_Reklamasi_FFD_Inti__PT__Fast_Forest_Development_.xlsx": "Reklamasi FFD Inti",
+    "RKP_Reklamasi_BKB_Inti__PT__Buana_Karya_Bhakti_.xlsx": "Reklamasi BKB Inti",
+    "RKP_Proyek_Restorasi_PKS_Batulaki_PT__BKB_Tahun_2026-2030.xlsx": "Restorasi PKS Batulaki",
+    "RKP_Proyek_Dermaga_-_PT__BKB_Tahap_II.xlsx": "Dermaga Tahap II BKB",
+    "RKP_Pembukaan_Lahan_Satui_Timur__PT__Buana_Karya_Bhakti_.xlsx": "Pembukaan Lahan Satui Timur",
+    "RKP_PLASMA_MANDIRI_TR_200_Ha.xlsx": "Pembukaan Lahan Plasma Mandiri TR",
+    "RKP_PLASMA_MANDIRI_SUCAB__300_Ha.xlsx": "Pembukaan Lahan Plasma Mandiri Sucab",
+    "RKP_PASTURA_KEBUN_BKB_INTI_-_2026.xlsx": "Pastura Kebun BKB Inti",
+    "RKP_PASTURA_KEBUN_FFD_INTI_-_2026.xlsx": "Pastura Kebun FFD Inti",
+}
+
 # ============================================================
 # KONFIGURASI HALAMAN & TEMA
 # ============================================================
@@ -587,6 +602,8 @@ def parse_workbook(file_bytes, file_name):
     if file_name in COMPANY_OVERRIDES:
         meta["company"] = COMPANY_OVERRIDES[file_name]
     meta["company"] = CANONICAL_COMPANIES.get(_company_key(meta["company"]), meta["company"])
+    if file_name in PROJECT_NAME_OVERRIDES:
+        meta["name"] = PROJECT_NAME_OVERRIDES[file_name]
 
     # Realisasi dinonaktifkan sementara atas permintaan — dikosongkan dulu semua,
     # nanti diaktifkan lagi setelah file/sheet realisasi resmi diupload terpisah.
@@ -604,6 +621,102 @@ def parse_workbook(file_bytes, file_name):
     wb.close()
     return dict(id=file_name, file_name=file_name, updated_at=datetime.now().isoformat(),
                 meta=meta, rencana=rencana, realisasi=realisasi, format=fmt, sheet=chosen_sheet)
+
+
+# ============================================================
+# GABUNG PROYEK — beberapa file yang sebenarnya satu proyek (mis. Plasma Mandiri
+# TR + Sucab) digabung jadi satu entri: Luas, Biaya, dan rincian pekerjaan dijumlahkan.
+# ============================================================
+MERGE_GROUPS = [
+    dict(
+        id="__MERGED_PLASMA_MANDIRI__",
+        name="Pembukaan Lahan Plasma Mandiri",
+        files=["RKP_PLASMA_MANDIRI_TR_200_Ha.xlsx", "RKP_PLASMA_MANDIRI_SUCAB__300_Ha.xlsx"],
+    ),
+]
+
+
+def _merge_period_lists(period_lists):
+    merged = {}
+    for periods in period_lists:
+        for pd_ in periods:
+            k = pd_["key"]
+            if k not in merged:
+                merged[k] = dict(key=k, sort_key=pd_["sort_key"], fisik=0, biaya=0)
+            merged[k]["fisik"] += pd_.get("fisik") or 0
+            merged[k]["biaya"] += pd_.get("biaya") or 0
+    return sorted(merged.values(), key=lambda x: x["sort_key"])
+
+
+def _merge_items(items_lists):
+    merged, order = {}, []
+    for items in items_lists:
+        for it in items:
+            k = it["nama"]
+            if k not in merged:
+                merged[k] = dict(volume_ha=0, biaya_rencana=0, periods_lists=[])
+                order.append(k)
+            if it.get("volume_ha"):
+                merged[k]["volume_ha"] += it["volume_ha"]
+            if it.get("biaya_rencana"):
+                merged[k]["biaya_rencana"] += it["biaya_rencana"]
+            merged[k]["periods_lists"].append(it.get("periods") or [])
+    result = []
+    for k in order:
+        m = merged[k]
+        vol = m["volume_ha"] or None
+        biaya = m["biaya_rencana"] or None
+        result.append(dict(
+            no=None, nama=k, volume_ha=vol, biaya_rencana=biaya,
+            rp_per_ha=(biaya / vol) if (biaya and vol) else None,
+            periods=_merge_period_lists(m["periods_lists"]),
+        ))
+    return result
+
+
+def merge_projects(project_list, merged_id, merged_name):
+    base = project_list[0]
+    grand_biaya = sum((p["rencana"]["grand"]["biaya_rencana"] or 0) for p in project_list) or None
+    grand_vol = sum((p["rencana"]["grand"]["volume_ha"] or 0) for p in project_list) or None
+    grand_periods = _merge_period_lists([p["rencana"]["grand"]["periods"] for p in project_list])
+    merged_items = _merge_items([p["rencana"]["items"] for p in project_list])
+
+    desc_parts = sorted({p["meta"]["desc"] for p in project_list if p["meta"]["desc"]})
+    merged_meta = dict(
+        name=merged_name,
+        company=base["meta"]["company"],
+        desc=" + ".join(desc_parts),
+        luas_num=grand_vol,
+        luas_text=None,
+        periode_text=base["meta"]["periode_text"],
+    )
+    return dict(
+        id=merged_id,
+        file_name=" + ".join(p["file_name"] for p in project_list),
+        updated_at=datetime.now().isoformat(),
+        meta=merged_meta,
+        rencana=dict(
+            items=merged_items,
+            grand=dict(volume_ha=grand_vol, biaya_rencana=grand_biaya, periods=grand_periods),
+            items_reliable=_items_reliable(merged_items, grand_biaya),
+        ),
+        realisasi=dict(status="none"),
+        format=base["format"],
+        sheet="(gabungan " + str(len(project_list)) + " file)",
+    )
+
+
+def apply_merge_groups(projects):
+    """projects: dict id -> project. Mengembalikan dict baru dengan grup di MERGE_GROUPS digabung
+    jadi satu entri (hanya kalau SEMUA file anggota grup itu ada di data yang dimuat)."""
+    result = dict(projects)
+    for group in MERGE_GROUPS:
+        members = [result[f] for f in group["files"] if f in result]
+        if len(members) == len(group["files"]) and len(members) >= 2:
+            for f in group["files"]:
+                del result[f]
+            result[group["id"]] = merge_projects(members, group["id"], group["name"])
+    return result
 
 
 # ============================================================
@@ -740,7 +853,7 @@ with st.sidebar:
                 st.rerun()
 
 # Gabungkan: data dari repo GitHub (utama) + file uji coba sesi (opsional, menimpa nama file yang sama)
-projects_all = {**repo_projects, **st.session_state.session_projects}
+projects_all = apply_merge_groups({**repo_projects, **st.session_state.session_projects})
 
 # ============================================================
 # SIDEBAR — FILTER
