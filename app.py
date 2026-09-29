@@ -139,24 +139,37 @@ def fmt_ha(n):
 
 
 # ============================================================
-# PARSER — mengikuti struktur sheet "RKP" (lihat dokumentasi di README)
+# PARSER — mendukung beberapa "keluarga" format RKP:
+#   Tipe "periode"   : breakdown Tahun > Catur Wulan > Fisik/Biaya (format asli)
+#   Tipe "tahunan"   : breakdown per Tahun langsung (kolom tahun 4-digit) + kolom TOTAL
+#   Tipe "sederhana" : daftar Uraian/Pekerjaan + Volume(opsional) + Biaya, tanpa jadwal waktu
 # ============================================================
 def norm(v):
     return "" if v is None else str(v).strip().lower()
 
 
-def find_header_row(rows, limit=25):
+def _is_leaf_label(name):
+    """False untuk baris subtotal/total/grand total (bukan item asli, untuk hindari double count)."""
+    if name is None:
+        return False
+    s = str(name).strip()
+    if not s:
+        return False
+    return not re.match(r"^(total|tatal|sub\s*total|grand\s*total|jumlah)\b", s, re.I)
+
+
+def find_header_row(rows, names=("pekerjaan", "item", "uraian"), limit=25):
     for r in range(min(len(rows), limit)):
         row = rows[r]
         for c, v in enumerate(row):
-            if norm(v) == "pekerjaan":
-                return r
-    return -1
+            if norm(v) in names:
+                return r, c
+    return -1, -1
 
 
 def parse_rkp_rows(rows):
-    """rows: list-of-list, 0-indexed, hasil openpyxl iter_rows(values_only=True)."""
-    hr = find_header_row(rows)
+    """Tipe 'periode': Tahun > Catur Wulan > Fisik/Biaya (RKP asli & RKP 08 / RKP FFD / RKP BKB)."""
+    hr, name_col = find_header_row(rows, names=("pekerjaan", "item"))
     if hr == -1:
         return None
 
@@ -171,7 +184,7 @@ def parse_rkp_rows(rows):
 
     fisik_cols = [c for c, v in enumerate(sub_row) if norm(v) == "fisik"]
     if not fisik_cols:
-        return None
+        return None  # bukan tipe periode — biarkan dicoba tipe lain oleh dispatcher
 
     maxc = max(len(tahun_row), len(periode_row), len(sub_row))
     last_t, last_p = None, None
@@ -196,8 +209,8 @@ def parse_rkp_rows(rows):
         cw = int(cw_m.group(1)) if cw_m else None
         display = f"{year or '?'} CW{cw or '?'}" if is_cw else pl.strip()
         periods.append(
-            dict(fisik_col=fc, biaya_col=bc, tahun=tl.strip(), periode=pl.strip(),
-                 is_cw=is_cw, year=year, cw=cw, sort_key=(year or 0) * 10 + (cw or 0), display=display)
+            dict(fisik_col=fc, biaya_col=bc, is_cw=is_cw,
+                 sort_key=(year or 0) * 10 + (cw or 0), display=display)
         )
     cw_periods = [p for p in periods if p["is_cw"]]
 
@@ -216,10 +229,10 @@ def parse_rkp_rows(rows):
     items = []
     for r in range(hr + 3, end):
         row = rows[r]
-        name = row[2] if len(row) > 2 else None
+        name = row[name_col] if name_col < len(row) else None
         vol = row[vol_col] if vol_col < len(row) else None
         biaya = row[biaya_col] if biaya_col < len(row) else None
-        if name is None or str(name).strip() == "":
+        if not _is_leaf_label(name):
             continue
         if not isinstance(vol, (int, float)) and not isinstance(biaya, (int, float)):
             continue
@@ -238,6 +251,8 @@ def parse_rkp_rows(rows):
             rp_per_ha=(biaya / vol) if isinstance(biaya, (int, float)) and isinstance(vol, (int, float)) and vol else None,
             periods=per,
         ))
+    if not items:
+        return None
 
     grand = None
     if grand_row != -1:
@@ -254,8 +269,184 @@ def parse_rkp_rows(rows):
         grand = dict(volume_ha=gvol if isinstance(gvol, (int, float)) else None,
                      biaya_rencana=gbiaya if isinstance(gbiaya, (int, float)) else None,
                      periods=gper)
+    if grand is None:
+        # fallback: jumlahkan item kalau tidak ada baris GRAND TOTAL eksplisit
+        grand = dict(
+            volume_ha=sum(it["volume_ha"] for it in items if it["volume_ha"]) or None,
+            biaya_rencana=sum(it["biaya_rencana"] for it in items if it["biaya_rencana"]) or None,
+            periods=[],
+        )
 
-    return dict(items=items, grand=grand)
+    return dict(items=items, grand=grand, items_reliable=_items_reliable(items, grand["biaya_rencana"]))
+
+
+def parse_simple_list_rows(rows):
+    """Tipe 'sederhana': Uraian/Pekerjaan/Item + Volume(opsional) + Biaya (atau 'Budget RKP'),
+    tanpa breakdown waktu. Mendukung kolom Realisasi inline kalau ada (mis. template Dermaga)."""
+    hr, name_col = find_header_row(rows, names=("pekerjaan", "item", "uraian"))
+    if hr == -1:
+        return None
+
+    search_rows = [r for r in rows[hr:hr + 4] if r]
+
+    def find_col(patterns, exact=True):
+        for rr in search_rows:
+            for c, v in enumerate(rr):
+                t = norm(v)
+                if not t:
+                    continue
+                for p in patterns:
+                    if (exact and t == p) or (not exact and p in t):
+                        return c
+        return None
+
+    vol_col = find_col(("volume",), exact=True)
+    biaya_col = find_col(("biaya",), exact=True)
+    if biaya_col is None:
+        biaya_col = find_col(("budget rkp",), exact=False)
+    if biaya_col is None:
+        return None
+
+    realisasi_cols = []
+    for rr in search_rows:
+        for c, v in enumerate(rr):
+            t = norm(v)
+            if t and "realisasi" in t and c not in realisasi_cols:
+                realisasi_cols.append(c)
+
+    items = []
+    for r in range(hr + 1, len(rows)):
+        row = rows[r]
+        name = row[name_col] if name_col < len(row) else None
+        biaya = row[biaya_col] if biaya_col < len(row) else None
+        if not _is_leaf_label(name) or not isinstance(biaya, (int, float)):
+            continue
+        vol = row[vol_col] if (vol_col is not None and vol_col < len(row)) else None
+        vol = vol if isinstance(vol, (int, float)) else None
+        real_val, found_real = 0, False
+        for rc in realisasi_cols:
+            v = row[rc] if rc < len(row) else None
+            if isinstance(v, (int, float)):
+                real_val += v
+                found_real = True
+        items.append(dict(
+            no=None, nama=str(name).strip(), volume_ha=vol, biaya_rencana=biaya,
+            rp_per_ha=(biaya / vol) if (vol and biaya) else None, periods=[],
+            _realisasi=(real_val if found_real else None),
+        ))
+    if not items:
+        return None
+
+    # Grand biaya: baris "total/subtotal/grand total" dgn biaya TERBESAR = grand total sebenarnya.
+    total_rows = []
+    for r in range(hr + 1, len(rows)):
+        row = rows[r]
+        name = row[name_col] if name_col < len(row) else None
+        biaya = row[biaya_col] if biaya_col < len(row) else None
+        if name and isinstance(biaya, (int, float)) and re.match(r"^(total|tatal|sub\s*total|grand\s*total|jumlah)\b", str(name).strip(), re.I):
+            total_rows.append(biaya)
+    grand_biaya = max(total_rows) if total_rows else None
+    if grand_biaya is None:
+        grand_biaya = sum(it["biaya_rencana"] for it in items if it["biaya_rencana"])
+
+    # Grand luas: JANGAN jumlah semua item — kalau beberapa aktivitas berbeda diterapkan pada
+    # plot yang sama, volume Ha-nya akan berulang identik di tiap baris. Jumlahkan nilai
+    # volume yang UNIK saja (lebih tahan banting daripada mengandalkan label subtotal, yang
+    # kadang typo di file sumber, mis. "Tatal Biaya X" alih-alih "Total Biaya X").
+    grand_vol = None
+    if vol_col is not None:
+        distinct_vols = sorted({it["volume_ha"] for it in items if it["volume_ha"]})
+        grand_vol = sum(distinct_vols) if distinct_vols else None
+
+    inline_realisasi_total = None
+    if realisasi_cols:
+        vals = [it["_realisasi"] for it in items if it["_realisasi"]]
+        inline_realisasi_total = sum(vals) if vals else 0
+
+    clean_items = [{k: v for k, v in it.items() if k != "_realisasi"} for it in items]
+    return dict(
+        items=clean_items,
+        grand=dict(volume_ha=grand_vol, biaya_rencana=grand_biaya, periods=[]),
+        inline_realisasi_total=inline_realisasi_total,
+        items_reliable=_items_reliable(clean_items, grand_biaya),
+    )
+
+
+def parse_yearly_coa_rows(rows):
+    """Tipe 'tahunan': tabel biaya per Tahun (kolom tahun 4-digit langsung) + kolom TOTAL
+    (mis. sheet REKAP TAHUNAN pada proyek konstruksi/restorasi)."""
+    hr, name_col = find_header_row(rows, names=("pekerjaan", "item", "uraian"))
+    if hr == -1:
+        return None
+
+    search_rows = [r for r in rows[hr:hr + 3] if r]
+    year_cols = []
+    for rr in search_rows:
+        for c, v in enumerate(rr):
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and 1990 <= v <= 2100 and float(v).is_integer():
+                if not any(c == cc for cc, _ in year_cols):
+                    year_cols.append((c, int(v)))
+    if len(year_cols) < 2:
+        return None
+
+    total_col = None
+    for rr in search_rows:
+        for c, v in enumerate(rr):
+            if norm(v) == "total":
+                total_col = c
+                break
+        if total_col is not None:
+            break
+
+    def row_periods(row):
+        return [dict(key=f"Tahun {yr}", sort_key=yr, fisik=0,
+                     biaya=(row[c] if c < len(row) and isinstance(row[c], (int, float)) else 0))
+                for c, yr in year_cols]
+
+    items = []
+    for r in range(hr + 1, len(rows)):
+        row = rows[r]
+        name = row[name_col] if name_col < len(row) else None
+        if not _is_leaf_label(name):
+            continue
+        yr_vals = [row[c] for c, _ in year_cols if c < len(row) and isinstance(row[c], (int, float))]
+        tot_val = row[total_col] if (total_col is not None and total_col < len(row)) else None
+        if not isinstance(tot_val, (int, float)):
+            tot_val = sum(yr_vals) if yr_vals else None
+        if tot_val is None:
+            continue
+        items.append(dict(no=None, nama=str(name).strip(), volume_ha=None,
+                           biaya_rencana=tot_val, rp_per_ha=None, periods=row_periods(row)))
+    if not items:
+        return None
+
+    grand_biaya, grand_periods = None, None
+    for r in range(hr + 1, len(rows)):
+        row = rows[r]
+        name = row[name_col] if name_col < len(row) else None
+        if name and re.match(r"^(total|tatal|sub\s*total|grand\s*total|jumlah)\b", str(name).strip(), re.I):
+            tot_val = row[total_col] if (total_col is not None and total_col < len(row)) else None
+            if isinstance(tot_val, (int, float)) and (grand_biaya is None or tot_val > grand_biaya):
+                grand_biaya = tot_val
+                grand_periods = row_periods(row)
+    if grand_biaya is None:
+        grand_biaya = sum(it["biaya_rencana"] for it in items if it["biaya_rencana"])
+        grand_periods = [dict(key=f"Tahun {yr}", sort_key=yr, fisik=0,
+                               biaya=sum(it["periods"][i]["biaya"] for it in items))
+                          for i, (c, yr) in enumerate(year_cols)]
+
+    return dict(items=items, grand=dict(volume_ha=None, biaya_rencana=grand_biaya, periods=grand_periods),
+                items_reliable=_items_reliable(items, grand_biaya))
+
+
+def _items_reliable(items, grand_biaya):
+    """False kalau jumlah biaya semua item menyimpang >3% dari grand total — pertanda struktur
+    subtotal berlapis di file sumber tidak terbaca bersih (dobel hitung atau ada yang kelewat),
+    supaya dashboard tidak menampilkan rincian per-pekerjaan seolah pasti akurat."""
+    if not grand_biaya:
+        return True
+    s = sum(it["biaya_rencana"] for it in items if it["biaya_rencana"])
+    return abs(s - grand_biaya) <= 0.03 * abs(grand_biaya)
 
 
 def extract_meta(rows, file_name):
@@ -273,7 +464,7 @@ def extract_meta(rows, file_name):
             if re.match(r"^pt[\s.]", s, re.I) and not company:
                 company = s
                 continue
-            if re.search(r"luas", s, re.I):
+            if re.match(r"^luas\s*:?\s*$", s, re.I):
                 for c2 in range(c + 1, len(row)):
                     if row[c2] not in (None, "") and str(row[c2]).strip() != "":
                         luas_text = str(row[c2]).strip()
@@ -301,6 +492,9 @@ def extract_meta(rows, file_name):
 
 
 def try_parse_realisasi(wb):
+    """Cari sheet terpisah bernama mengandung 'realisasi'/'aktual' dengan struktur tipe 'periode'
+    yang SAMA seperti sheet RKP-nya. Sengaja tidak mencoba tipe lain di sini, supaya sheet yang
+    ternyata milik proyek lain (leftover template) tidak ikut kebaca sebagai angka valid."""
     real_sheet = next((n for n in wb.sheetnames if re.search(r"realisasi|aktual", n, re.I)), None)
     if not real_sheet:
         return dict(status="none")
@@ -315,19 +509,67 @@ def try_parse_realisasi(wb):
         return dict(status="unrecognized", sheet=real_sheet)
 
 
+def _gather_rkp_sheet_candidates(sheetnames):
+    """Urutan prioritas kandidat sheet utama: 'RKP' persis, lalu sheet berawalan 'RKP',
+    lalu sheet 'REKAP TAHUNAN' / 'REKAP PEKERJAAN' (format proyek konstruksi)."""
+    cands = []
+    for n in sheetnames:
+        if n.strip().upper() == "RKP" and n not in cands:
+            cands.append(n)
+    for n in sheetnames:
+        if n.strip().upper().startswith("RKP") and n not in cands:
+            cands.append(n)
+    for n in sheetnames:
+        if re.search(r"rekap\s*tahunan", n, re.I) and n not in cands:
+            cands.append(n)
+    for n in sheetnames:
+        if re.search(r"rekap\s*pekerjaan", n, re.I) and n not in cands:
+            cands.append(n)
+    return cands
+
+
 def parse_workbook(file_bytes, file_name):
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
-    if "RKP" not in wb.sheetnames:
-        return dict(error='Sheet "RKP" tidak ditemukan di file ini.')
-    ws = wb["RKP"]
-    rows = [list(r) for r in ws.iter_rows(values_only=True)]
-    rencana = parse_rkp_rows(rows)
-    if not rencana:
-        return dict(error='Format sheet "RKP" tidak dikenali (header "Pekerjaan"/"Volume"/"Fisik" tidak ditemukan).')
-    meta = extract_meta(rows, file_name)
-    realisasi = try_parse_realisasi(wb)
+    candidates = _gather_rkp_sheet_candidates(wb.sheetnames)
+    if not candidates:
+        return dict(error='Tidak ditemukan sheet RKP/REKAP di file ini.')
+
+    chosen_sheet, rencana, fmt = None, None, None
+    for sheet_name in candidates:
+        rows = [list(r) for r in wb[sheet_name].iter_rows(values_only=True)]
+        parsed = parse_rkp_rows(rows)
+        if parsed:
+            chosen_sheet, rencana, fmt = sheet_name, parsed, "periode"
+            break
+        parsed = parse_yearly_coa_rows(rows)
+        if parsed:
+            chosen_sheet, rencana, fmt = sheet_name, parsed, "tahunan"
+            break
+        parsed = parse_simple_list_rows(rows)
+        if parsed:
+            chosen_sheet, rencana, fmt = sheet_name, parsed, "sederhana"
+            break
+
+    if rencana is None:
+        return dict(error=(
+            f"Format tidak dikenali pada sheet yang dicoba ({', '.join(candidates)}). "
+            "Bukan format periode (Catur Wulan), tahunan, atau daftar biaya sederhana yang didukung."
+        ))
+
+    meta_rows = [list(r) for r in wb[chosen_sheet].iter_rows(values_only=True)]
+    meta = extract_meta(meta_rows, file_name)
+
+    if fmt == "sederhana" and rencana.get("inline_realisasi_total") is not None:
+        total_real = rencana["inline_realisasi_total"]
+        realisasi = dict(
+            status="total_only",
+            data=dict(items=[], grand=dict(volume_ha=None, biaya_rencana=total_real, periods=[])),
+        )
+    else:
+        realisasi = try_parse_realisasi(wb)
+
     return dict(id=file_name, file_name=file_name, updated_at=datetime.now().isoformat(),
-                meta=meta, rencana=rencana, realisasi=realisasi)
+                meta=meta, rencana=rencana, realisasi=realisasi, format=fmt, sheet=chosen_sheet)
 
 
 # ============================================================
@@ -348,7 +590,20 @@ def rp_per_ha(p):
 
 
 def has_realisasi(p):
+    """True hanya untuk realisasi yang cocok item-per-item (status 'ok')."""
     return p["realisasi"]["status"] == "ok"
+
+
+def has_any_realisasi(p):
+    """True kalau ada angka realisasi sama sekali, walau cuma total (status 'ok' atau 'total_only')."""
+    return p["realisasi"]["status"] in ("ok", "total_only")
+
+
+def realisasi_total(p):
+    if not has_any_realisasi(p):
+        return None
+    g = p["realisasi"]["data"]["grand"]
+    return g["biaya_rencana"] if g else None
 
 
 def all_period_keys(projects):
@@ -517,7 +772,7 @@ if selected_view == "📊 Ringkasan":
     total_biaya = sum((total_rencana(p) or 0) for p in projects.values())
     total_luas = sum((luas_proj(p) or 0) for p in projects.values())
     avg_rp_ha = total_biaya / total_luas if total_luas else None
-    n_real = sum(1 for p in projects.values() if has_realisasi(p))
+    n_real = sum(1 for p in projects.values() if has_any_realisasi(p))
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Jumlah Proyek", len(projects), f"{n_real} dengan realisasi")
@@ -560,11 +815,84 @@ if selected_view == "📊 Ringkasan":
                         yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E", automargin=True))
     st.plotly_chart(fig2, use_container_width=True, theme=None)
 
+    st.markdown("#### Pekerjaan & Biaya — Semua Proyek")
+    st.caption("Semua jenis pekerjaan (level sama seperti tabel Rincian Pekerjaan) digabung lintas proyek yang terfilter.")
+
+    unreliable_names = [p["meta"]["name"] for p in projects.values() if not p["rencana"].get("items_reliable", True)]
+
+    work_rows = []
+    for p in projects.values():
+        if not p["rencana"].get("items_reliable", True):
+            continue
+        for it in p["rencana"]["items"]:
+            work_rows.append({
+                "Pekerjaan": it["nama"],
+                "Proyek": p["meta"]["name"],
+                "Volume (Ha)": it["volume_ha"] or 0,
+                "Biaya Rencana": it["biaya_rencana"] or 0,
+            })
+    work_df = pd.DataFrame(work_rows)
+
+    if unreliable_names:
+        st.caption(
+            "⚠️ " + ", ".join(unreliable_names) + " tidak disertakan di sini karena rincian per "
+            "pekerjaannya tidak bisa direkonsiliasi otomatis dengan total rencananya (struktur subtotal "
+            "berlapis di file sumber). Total biaya proyek itu sendiri tetap akurat — lihat di halaman "
+            "Ringkasan atau detail proyeknya masing-masing."
+        )
+
+    if work_df.empty:
+        st.info("Belum ada rincian pekerjaan pada proyek yang terfilter.")
+    else:
+        agg = (
+            work_df.groupby("Pekerjaan", as_index=False)
+            .agg(**{
+                "Total Biaya": ("Biaya Rencana", "sum"),
+                "Total Volume (Ha)": ("Volume (Ha)", "sum"),
+                "Jumlah Proyek": ("Proyek", "nunique"),
+            })
+            .sort_values("Total Biaya", ascending=False)
+        )
+        agg["Rp / Ha"] = agg["Total Biaya"] / agg["Total Volume (Ha)"].replace(0, pd.NA)
+
+        fig5 = go.Figure(go.Bar(
+            x=agg["Total Biaya"], y=agg["Pekerjaan"], orientation="h",
+            marker_color=GOLD, text=[fmt_rp(v) for v in agg["Total Biaya"]], textposition="outside",
+        ))
+        fig5.update_layout(
+            height=max(220, 46 * len(agg)), margin=dict(l=10, r=40, t=10, b=10),
+            xaxis_title="Rp", plot_bgcolor="white", paper_bgcolor="white",
+            font=dict(color="#1B2A1E", size=13),
+            xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
+            yaxis=dict(color="#1B2A1E", automargin=True, categoryorder="total ascending"),
+        )
+        st.plotly_chart(fig5, use_container_width=True, theme=None)
+
+        with st.expander("📋 Lihat tabel rincian per pekerjaan & proyek"):
+            st.markdown("**Ringkasan per jenis pekerjaan (digabung semua proyek)**")
+            st.dataframe(
+                agg, use_container_width=True, hide_index=True,
+                column_config={
+                    "Total Biaya": st.column_config.NumberColumn(format="Rp %d"),
+                    "Total Volume (Ha)": st.column_config.NumberColumn(format="%.2f"),
+                    "Rp / Ha": st.column_config.NumberColumn(format="Rp %d"),
+                },
+            )
+            st.markdown("**Rincian per proyek**")
+            detail_df = work_df.sort_values(["Pekerjaan", "Proyek"])
+            st.dataframe(
+                detail_df, use_container_width=True, hide_index=True,
+                column_config={
+                    "Volume (Ha)": st.column_config.NumberColumn(format="%.2f"),
+                    "Biaya Rencana": st.column_config.NumberColumn(format="Rp %d"),
+                },
+            )
+
     st.markdown("#### Daftar Proyek")
     cols = st.columns(3)
     for i, p in enumerate(projects.values()):
         with cols[i % 3]:
-            real = has_realisasi(p)
+            real = has_any_realisasi(p)
             badge = '<span class="badge-ok">Ada realisasi</span>' if real else '<span class="badge-wait">Rencana saja</span>'
             st.markdown(
                 f"""
@@ -596,6 +924,7 @@ else:
         st.stop()
 
     real = has_realisasi(p)
+    any_real = has_any_realisasi(p)
     total = total_rencana(p)
     luas = luas_proj(p)
 
@@ -607,33 +936,58 @@ else:
     c1.metric("Luas", fmt_ha(luas))
     c2.metric("Total Biaya Rencana", fmt_rp(total), fmt_rp_full(total))
     c3.metric("Biaya / Ha", fmt_rp(rp_per_ha(p)))
-    c4.metric("Status Realisasi", "Tersedia" if real else "Belum ada")
+    status_label = "Tersedia" if real else ("Total saja" if any_real else "Belum ada")
+    c4.metric("Status Realisasi", status_label)
 
-    if not real:
+    if any_real and not real:
+        rt = realisasi_total(p)
+        capaian = (rt / total * 100) if (rt is not None and total) else None
+        st.markdown(
+            f"""<div class="footnote">📊 Ada angka realisasi (total) untuk proyek ini: <b>{fmt_rp_full(rt)}</b>
+            {f"— sekitar <b>{capaian:.1f}%</b> dari rencana." if capaian is not None else ""}
+            Rinciannya belum bisa dipecah per pekerjaan karena struktur sheet realisasi berbeda dari sheet
+            rencananya.</div>""",
+            unsafe_allow_html=True,
+        )
+    elif not any_real:
         st.markdown(
             """<div class="footnote">📋 File ini belum berisi data realisasi (kolom/sheet "Realisasi" tidak
-            terdeteksi). Tambahkan sheet baru bernama mengandung kata <b>Realisasi</b> dengan struktur tabel
-            yang mirip sheet RKP, lalu upload ulang — dashboard otomatis akan menampilkan perbandingan
-            Rencana vs Realisasi di sini.</div>""",
+            terdeteksi, atau sheet tersebut ternyata bukan untuk proyek ini). Tambahkan sheet baru bernama
+            mengandung kata <b>Realisasi</b> dengan struktur tabel yang mirip sheet rencananya, lalu upload
+            ulang — dashboard otomatis akan menampilkan perbandingan Rencana vs Realisasi di sini.</div>""",
             unsafe_allow_html=True,
         )
 
-    st.markdown("#### Biaya per Periode (Catur Wulan)")
     g = p["rencana"]["grand"]
     keys = [pd_["key"] for pd_ in g["periods"]] if g else []
-    rencana_vals = [pd_["biaya"] for pd_ in g["periods"]] if g else []
-    fig3 = go.Figure()
-    fig3.add_bar(name="Rencana", x=keys, y=rencana_vals, marker_color=FOREST)
-    if real and p["realisasi"]["data"]["grand"]:
-        rmap = {pd_["key"]: pd_["biaya"] for pd_ in p["realisasi"]["data"]["grand"]["periods"]}
-        fig3.add_bar(name="Realisasi", x=keys, y=[rmap.get(k, 0) for k in keys], marker_color=GOLD)
-    fig3.update_layout(barmode="group", height=320, margin=dict(l=10, r=10, t=10, b=10),
-                        plot_bgcolor="white", paper_bgcolor="white",
-                        legend=dict(orientation="h", y=-0.2, font=dict(color="#1B2A1E")),
-                        font=dict(color="#1B2A1E", size=13),
-                        xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
-                        yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"))
-    st.plotly_chart(fig3, use_container_width=True, key=f"biaya_{p['id']}", theme=None)
+
+    if not keys:
+        st.info("Proyek ini tidak memiliki breakdown per periode (Catur Wulan/Tahun) — hanya total biaya per pekerjaan di bawah.")
+    else:
+        period_label = "Tahun" if keys[0].startswith("Tahun ") else "Catur Wulan"
+        st.markdown(f"#### Biaya per Periode ({period_label})")
+        rencana_vals = [pd_["biaya"] for pd_ in g["periods"]]
+        fig3 = go.Figure()
+        fig3.add_bar(name="Rencana", x=keys, y=rencana_vals, marker_color=FOREST)
+        if real and p["realisasi"]["data"]["grand"]:
+            rmap = {pd_["key"]: pd_["biaya"] for pd_ in p["realisasi"]["data"]["grand"]["periods"]}
+            fig3.add_bar(name="Realisasi", x=keys, y=[rmap.get(k, 0) for k in keys], marker_color=GOLD)
+        fig3.update_layout(barmode="group", height=320, margin=dict(l=10, r=10, t=10, b=10),
+                            plot_bgcolor="white", paper_bgcolor="white",
+                            legend=dict(orientation="h", y=-0.2, font=dict(color="#1B2A1E")),
+                            font=dict(color="#1B2A1E", size=13),
+                            xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
+                            yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"))
+        st.plotly_chart(fig3, use_container_width=True, key=f"biaya_{p['id']}", theme=None)
+
+    items_reliable = p["rencana"].get("items_reliable", True)
+    if not items_reliable:
+        st.warning(
+            "⚠️ Rincian per pekerjaan di bawah ini kemungkinan **tidak sepenuhnya akurat** — struktur "
+            "subtotal berlapis pada file sumber membuat sebagian baris berpotensi terhitung dobel atau "
+            "malah terlewat. Total Biaya Rencana pada kartu di atas tetap akurat (diambil langsung dari "
+            "baris Grand Total/Total di file, bukan dari penjumlahan baris di bawah)."
+        )
 
     st.markdown("#### Komposisi Biaya per Pekerjaan")
     items = [it for it in p["rencana"]["items"] if it["biaya_rencana"]]
@@ -650,7 +1004,7 @@ else:
     fig4.update_traces(textfont=dict(color="#1B2A1E"))
     st.plotly_chart(fig4, use_container_width=True, key=f"comp_{p['id']}", theme=None)
 
-    st.markdown("#### Rincian Pekerjaan")
+    st.markdown("#### Rincian Pekerjaan" + ("" if items_reliable else " ⚠️"))
     real_map = {}
     if real:
         for it in p["realisasi"]["data"]["items"]:
