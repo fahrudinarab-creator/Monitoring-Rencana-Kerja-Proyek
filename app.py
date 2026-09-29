@@ -74,84 +74,156 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-FOREST = "#1F4D36"
+FOREST = "#123524"
 FOREST_LIGHT = "#3C7A5A"
 GOLD = "#C08A2E"
+GOLD_LIGHT = "#E8C776"
 RUST = "#B25330"
-PALETTE = ["#1F4D36", "#C08A2E", "#3C7A5A", "#B25330", "#7C9A85", "#8C6A2E", "#4E6B57", "#D9AE63"]
+INK = "#16231A"
+IVORY = "#F6F4EE"
+PALETTE = ["#123524", "#C08A2E", "#3C7A5A", "#B25330", "#7C9A85", "#8C6A2E", "#4E6B57", "#D9AE63"]
 
 st.markdown(
     f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,800&family=Inter:wght@400;500;600;700;800&display=swap');
+
     /* Paksa tema terang ini terlepas dari mode gelap/terang browser/OS, supaya
        tidak bergantung pada .streamlit/config.toml ikut ter-upload atau tidak. */
 
     html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"],
     [data-testid="stMain"], [data-testid="stBottomBlockContainer"] {{
-        background-color: #F4F5EF !important;
-        color: #1B2A1E !important;
+        background-color: {IVORY} !important;
+        color: {INK} !important;
+        font-family: 'Inter', sans-serif;
     }}
 
     h1, h2, h3, h4, h5, h6,
     [data-testid="stMarkdownContainer"] h1, [data-testid="stMarkdownContainer"] h2,
     [data-testid="stMarkdownContainer"] h3, [data-testid="stMarkdownContainer"] h4 {{
-        font-family: 'Georgia', serif !important; color: {FOREST} !important;
+        font-family: 'Fraunces', serif !important; color: {FOREST} !important;
+        letter-spacing: -0.01em;
     }}
+    [data-testid="stMarkdownContainer"] h1 {{ font-weight: 700 !important; }}
+    [data-testid="stMarkdownContainer"] h4 {{ font-weight: 600 !important; font-size: 19px !important; margin-top: 6px !important; }}
 
     [data-testid="stMarkdownContainer"] p,
     [data-testid="stMarkdownContainer"] li,
     [data-testid="stMarkdownContainer"] span,
     .stCaption, [data-testid="stCaptionContainer"],
     label, .stRadio label, .stRadio span {{
-        color: #1B2A1E !important;
+        color: {INK} !important;
     }}
     [data-testid="stCaptionContainer"] p {{ color: #6C7566 !important; }}
 
+    /* ---------- KPI metric cards: aksen tepi kiri berwarna per kategori ---------- */
     div[data-testid="stMetric"] {{
-        background: #FFFFFF !important; border: 1px solid #E1E3D9; border-radius: 12px;
-        padding: 14px 16px; box-shadow: 0 1px 2px rgba(27,42,30,0.04);
+        background: #FFFFFF !important; border: 1px solid #E4E1D6; border-left: 4px solid {FOREST};
+        border-radius: 14px; padding: 18px 20px 16px;
+        box-shadow: 0 1px 2px rgba(18,53,36,0.05), 0 8px 20px rgba(18,53,36,0.04);
     }}
-    div[data-testid="stMetricLabel"] p {{ color: #6C7566 !important; font-size: 12.5px; }}
-    div[data-testid="stMetricValue"] {{ color: {FOREST} !important; }}
-    div[data-testid="stMetricDelta"] {{ color: {FOREST_LIGHT} !important; }}
+    div[data-testid="stMetricLabel"] p {{
+        color: #6C7566 !important; font-size: 11.5px !important; font-weight: 700 !important;
+        text-transform: uppercase; letter-spacing: 0.06em;
+    }}
+    div[data-testid="stMetricValue"] {{
+        color: {FOREST} !important; font-family: 'Fraunces', serif !important; font-weight: 700 !important;
+    }}
+    div[data-testid="stMetricDelta"] {{ color: {FOREST_LIGHT} !important; font-weight: 600 !important; }}
 
-    /* Tabs */
+    /* Kartu KPI ke-2/3/4 dalam satu baris: variasi aksen supaya tidak seragam total */
+    [data-testid="stHorizontalBlock"] div[data-testid="stMetric"]:nth-of-type(4n+2) {{ border-left-color: {GOLD}; }}
+    [data-testid="stHorizontalBlock"] div[data-testid="stMetric"]:nth-of-type(4n+3) {{ border-left-color: {FOREST_LIGHT}; }}
+    [data-testid="stHorizontalBlock"] div[data-testid="stMetric"]:nth-of-type(4n+4) {{ border-left-color: {RUST}; }}
+
+    /* ---------- Tabs ---------- */
     button[data-baseweb="tab"] p {{ color: #6C7566 !important; font-weight: 600; }}
     button[data-baseweb="tab"][aria-selected="true"] p {{ color: {FOREST} !important; }}
     [data-testid="stTabs"] {{ background: transparent !important; }}
     div[data-baseweb="tab-highlight"] {{ background-color: {GOLD} !important; }}
     div[data-baseweb="tab-border"] {{ background-color: #E1E3D9 !important; }}
 
-    /* Sidebar — bertema hijau tua supaya konsisten sebagai identitas brand */
-    section[data-testid="stSidebar"] {{
-        background-color: #17372A !important;
+    /* ---------- Tombol biasa: lebih premium, tidak kotak polos ---------- */
+    .stButton button {{
+        border-radius: 10px !important; font-weight: 600 !important; border: 1px solid #E4E1D6 !important;
+        transition: transform .08s ease, box-shadow .12s ease;
     }}
-    section[data-testid="stSidebar"] * {{
-        color: #F4F5EF !important;
+    .stButton button:hover {{ transform: translateY(-1px); box-shadow: 0 4px 14px rgba(18,53,36,0.12); }}
+    [data-testid="stMain"] .stButton button {{
+        background: #FFFFFF !important; color: {FOREST} !important;
     }}
-    section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{
-        color: #B9D6C4 !important;
-    }}
-    section[data-testid="stSidebar"] .stButton button {{
-        background-color: {GOLD} !important; color: #2A1D06 !important; border: none !important;
-    }}
-    section[data-testid="stSidebar"] [data-testid="stExpander"] {{
-        border: 1px solid rgba(255,255,255,0.2) !important; border-radius: 10px;
-    }}
-    section[data-testid="stSidebar"] [data-testid="stAlertContainer"] {{
-        color: #1B2A1E !important;
-    }}
-    section[data-testid="stSidebar"] [data-testid="stAlertContainer"] * {{
-        color: #1B2A1E !important;
+    [data-testid="stDownloadButton"] button {{
+        background: {GOLD} !important; color: #2A1D06 !important; border: none !important; font-weight: 700 !important;
     }}
 
-    /* Dataframe / table */
-    [data-testid="stDataFrame"] {{ color: #1B2A1E !important; }}
+    /* ---------- Sidebar: hijau tua + navigasi ala segmented pill ---------- */
+    section[data-testid="stSidebar"] {{
+        background: linear-gradient(180deg, {FOREST} 0%, #0C2318 100%) !important;
+    }}
+    section[data-testid="stSidebar"] * {{ color: {IVORY} !important; }}
+    section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{ color: #A9C9B6 !important; }}
+    section[data-testid="stSidebar"] hr {{ border-color: rgba(255,255,255,0.12) !important; }}
+
+    section[data-testid="stSidebar"] .stButton button {{
+        background-color: {GOLD} !important; color: #2A1D06 !important; border: none !important;
+        border-radius: 10px !important; font-weight: 700 !important;
+    }}
+    section[data-testid="stSidebar"] [data-testid="stExpander"] {{
+        border: 1px solid rgba(255,255,255,0.16) !important; border-radius: 12px; background: rgba(255,255,255,0.03);
+    }}
+    section[data-testid="stSidebar"] [data-testid="stAlertContainer"] {{ color: {INK} !important; border-radius: 10px; }}
+    section[data-testid="stSidebar"] [data-testid="stAlertContainer"] * {{ color: {INK} !important; }}
+
+    /* Radio "Halaman" jadi pil segmented, bukan bulatan radio bawaan */
+    section[data-testid="stSidebar"] div[role="radiogroup"] {{
+        display: flex; flex-direction: column; gap: 4px; background: rgba(255,255,255,0.06);
+        border-radius: 12px; padding: 4px;
+    }}
+    section[data-testid="stSidebar"] div[role="radiogroup"] label {{
+        border-radius: 9px; padding: 8px 12px !important; margin: 0 !important; transition: background .12s ease;
+    }}
+    section[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) {{
+        background: {GOLD} !important;
+    }}
+    section[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) p {{
+        color: #2A1D06 !important; font-weight: 700 !important;
+    }}
+    section[data-testid="stSidebar"] div[role="radiogroup"] input {{ display: none !important; }}
+    section[data-testid="stSidebar"] div[role="radiogroup"] label > div:first-child {{ display: none !important; }}
+
+    /* ---------- Dataframe / table ---------- */
+    [data-testid="stDataFrame"] {{ color: {INK} !important; border-radius: 12px; overflow: hidden; }}
+
+    /* ---------- Container berbatas (panel) ---------- */
+    [data-testid="stVerticalBlockBorderWrapper"] {{
+        border-radius: 16px !important; border-color: #E4E1D6 !important;
+        box-shadow: 0 1px 2px rgba(18,53,36,0.04), 0 10px 24px rgba(18,53,36,0.05);
+    }}
 
     .badge-wait {{ background:#F5E4DA; color:{RUST}; padding:3px 10px; border-radius:99px; font-size:11.5px; font-weight:700; }}
     .badge-ok {{ background:#E4EEE7; color:{FOREST}; padding:3px 10px; border-radius:99px; font-size:11.5px; font-weight:700; }}
-    .footnote {{ background:#E4EEE7; border-radius:10px; padding:12px 14px; font-size:13px; color:#3d4a40 !important; }}
+    .footnote {{ background:#E4EEE7; border-radius:12px; padding:14px 16px; font-size:13px; color:#3d4a40 !important; }}
     .footnote * {{ color:#3d4a40 !important; }}
+
+    /* ---------- Hero band (Beranda) ---------- */
+    .hero-band {{
+        background: linear-gradient(120deg, {FOREST} 0%, #0C2318 100%);
+        border-radius: 22px; padding: 36px 40px; color: {IVORY};
+        display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px;
+        box-shadow: 0 20px 40px rgba(12,35,24,0.25);
+        position: relative; overflow: hidden;
+    }}
+    .hero-band::after {{
+        content: ""; position: absolute; right: -60px; top: -60px; width: 220px; height: 220px;
+        border-radius: 50%; background: radial-gradient(circle, rgba(232,199,118,0.18), transparent 70%);
+    }}
+    .hero-eyebrow {{ font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A9C9B6; font-weight: 700; margin: 0 0 10px; }}
+    .hero-number {{ font-family: 'Fraunces', serif; font-weight: 700; font-size: 52px; color: #FFFFFF; margin: 0; line-height: 1; }}
+    .hero-sub {{ font-size: 14px; color: #CBE0D3; margin: 10px 0 0; max-width: 440px; }}
+    .hero-split {{ display: flex; gap: 28px; flex-wrap: wrap; }}
+    .hero-split-item {{ text-align: right; }}
+    .hero-split-num {{ font-family: 'Fraunces', serif; font-size: 24px; font-weight: 700; color: #FFFFFF; }}
+    .hero-split-lbl {{ font-size: 11.5px; color: #A9C9B6; text-transform: uppercase; letter-spacing: 0.05em; }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -1103,10 +1175,8 @@ if projects_all:
 # ============================================================
 # MAIN
 # ============================================================
-st.title("🌴 Monitoring RKP")
-st.caption("Dashboard konsolidasi Rencana Kerja Proyek — banding biaya & capaian fisik lintas proyek.")
-
 if not projects_all:
+    st.title("🌴 Monitoring RKP")
     st.info(
         "⬅️ Belum ada data. Tambahkan file `.xlsx` RKP ke folder **`data/`** di repo GitHub lalu "
         "commit, atau upload file uji coba lewat panel kiri untuk mulai memantau."
@@ -1114,6 +1184,7 @@ if not projects_all:
     st.stop()
 
 if not projects:
+    st.title("🌴 Monitoring RKP")
     st.warning("Tidak ada proyek yang cocok dengan filter Perusahaan/Proyek yang dipilih di sidebar. Coba longgarkan filternya.")
     st.stop()
 
@@ -1134,15 +1205,40 @@ if section == "🏠 Beranda":
     by_jenis = {}
     for p in projects.values():
         by_jenis[project_jenis(p)] = by_jenis.get(project_jenis(p), 0) + (total_rencana(p) or 0)
-
-    st.caption(f"{len(projects)} proyek terfilter · diperbarui {datetime.now().strftime('%d %b %Y')}")
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Investasi Portofolio", fmt_rp(total_biaya), fmt_rp_full(total_biaya))
-    c2.metric("Total Luas Tanam", fmt_ha(total_luas))
     tanaman_pct = (by_jenis.get("Tanaman", 0) / total_biaya * 100) if total_biaya else 0
-    c3.metric("Tanaman vs Infrastruktur", f"{tanaman_pct:.0f}% / {100-tanaman_pct:.0f}%")
-    c4.metric("Cakupan Realisasi", f"{n_real} / {len(projects)}", "menunggu upload data realisasi" if n_real == 0 else None)
+
+    st.markdown(
+        f"""
+        <div class="hero-band">
+          <div>
+            <p class="hero-eyebrow">🌴 Monitoring RKP &middot; {len(projects)} proyek terfilter</p>
+            <p class="hero-number">{fmt_rp(total_biaya)}</p>
+            <p class="hero-sub">Total investasi portofolio pada {datetime.now().strftime('%d %B %Y')} — {fmt_rp_full(total_biaya)}, dari {len(projects)} proyek di {len({p['meta']['company'] for p in projects.values()})} perusahaan.</p>
+          </div>
+          <div class="hero-split">
+            <div class="hero-split-item">
+              <div class="hero-split-num">{tanaman_pct:.0f}%</div>
+              <div class="hero-split-lbl">Tanaman</div>
+            </div>
+            <div class="hero-split-item">
+              <div class="hero-split-num">{100-tanaman_pct:.0f}%</div>
+              <div class="hero-split-lbl">Infrastruktur</div>
+            </div>
+            <div class="hero-split-item">
+              <div class="hero-split-num">{n_real}/{len(projects)}</div>
+              <div class="hero-split-lbl">Ada Realisasi</div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.write("")
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Luas Tanam", fmt_ha(total_luas))
+    c2.metric("Jumlah Proyek", len(projects))
+    c3.metric("Cakupan Realisasi", f"{n_real} / {len(projects)}", "menunggu upload data realisasi" if n_real == 0 else None)
 
     unreliable_names = [p["meta"]["name"] for p in projects.values() if not p["rencana"].get("items_reliable", True)]
     no_real_count = len(projects) - n_real
@@ -1236,6 +1332,7 @@ if section == "🏠 Beranda":
 # PORTOFOLIO (dulu "Ringkasan": tabel + grafik semua proyek terfilter)
 # ================================================================
 elif section == "📋 Portofolio":
+    st.title("📋 Portofolio Proyek")
     total_biaya = sum((total_rencana(p) or 0) for p in projects.values())
     total_luas = sum((luas_proj(p) or 0) for p in projects.values())
     avg_rp_ha = total_biaya / total_luas if total_luas else None
@@ -1477,6 +1574,7 @@ elif section == "📋 Portofolio":
 # PER PERUSAHAAN
 # ================================================================
 elif section == "🏢 Per Perusahaan":
+    st.title("🏢 Per Perusahaan")
     companies = sorted({p["meta"]["company"] for p in projects.values()})
     st.caption(f"{len(companies)} perusahaan pada filter saat ini.")
 
@@ -1528,7 +1626,7 @@ elif section == "📁 Detail Proyek":
     total = total_rencana(p)
     luas = luas_proj(p)
 
-    st.subheader(p["meta"]["name"])
+    st.title(f"📁 {p['meta']['name']}")
     st.caption(f"{p['meta']['company']}" + (f" · {p['meta']['desc']}" if p["meta"]["desc"] else "") +
                (f" · {p['meta']['periode_text']}" if p["meta"]["periode_text"] else ""))
 
