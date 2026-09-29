@@ -231,6 +231,17 @@ st.markdown(
     .kpi-strip-item:last-child {{ border-right: none; }}
     .kpi-strip-num {{ font-family: 'Fraunces', serif; font-weight: 700; font-size: 26px; color: {FOREST_LIGHT}; line-height: 1.1; }}
     .kpi-strip-lbl {{ font-size: 11px; color: {MUTED}; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; font-weight: 600; }}
+
+    /* ---------- Header judul aplikasi (sama di semua halaman) ---------- */
+    .app-header {{
+        display: flex; align-items: center; gap: 14px;
+        padding: 4px 0 18px; border-bottom: 1px solid {DARK_BORDER}; margin-bottom: 22px;
+    }}
+    .app-header-icon {{ font-size: 30px; line-height: 1; }}
+    .app-header-title {{
+        font-family: 'Fraunces', serif; font-weight: 700; font-size: 24px; letter-spacing: 0.01em;
+        color: {INK};
+    }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -1035,7 +1046,7 @@ def project_time_progress_pct(p):
     return max(0, min(100, (frac_now - start_y) / total_span * 100))
 
 
-SECTIONS = ["🏠 Beranda", "📋 Portofolio", "🏢 Per Perusahaan", "📁 Detail Proyek"]
+SECTIONS = ["📊 Ringkasan Portofolio", "📁 Detail Proyek"]
 
 
 # ============================================================
@@ -1172,18 +1183,20 @@ if projects_all:
                 st.session_state["section"] = SECTIONS[0]
             st.radio("Halaman", SECTIONS, key="section", label_visibility="collapsed")
 
-            if st.session_state["section"] == "📁 Detail Proyek":
-                proj_names = [p["meta"]["name"] for p in projects.values()]
-                if st.session_state.get("detail_project") not in proj_names:
-                    st.session_state["detail_project"] = proj_names[0]
-                st.selectbox("Pilih proyek", proj_names, key="detail_project")
-
 
 # ============================================================
 # MAIN
 # ============================================================
+def render_header():
+    st.markdown(
+        '<div class="app-header"><span class="app-header-icon">🏗️🌴</span>'
+        '<span class="app-header-title">MONITORING RENCANA KERJA PROYEK</span></div>',
+        unsafe_allow_html=True,
+    )
+
+
 if not projects_all:
-    st.title("🌴 Monitoring RKP")
+    render_header()
     st.info(
         "⬅️ Belum ada data. Tambahkan file `.xlsx` RKP ke folder **`data/`** di repo GitHub lalu "
         "commit, atau upload file uji coba lewat panel kiri untuk mulai memantau."
@@ -1191,596 +1204,163 @@ if not projects_all:
     st.stop()
 
 if not projects:
-    st.title("🌴 Monitoring RKP")
+    render_header()
     st.warning("Tidak ada proyek yang cocok dengan filter Perusahaan/Proyek yang dipilih di sidebar. Coba longgarkan filternya.")
     st.stop()
 
 section = st.session_state.get("section", SECTIONS[0])
-
-
-def _go_section(name):
-    st.session_state["section"] = name
-
+render_header()
 
 # ================================================================
-# BERANDA (ringkasan eksekutif)
+# FITUR 1 — RINGKASAN PORTOFOLIO
 # ================================================================
-if section == "🏠 Beranda":
+if section == "📊 Ringkasan Portofolio":
     total_biaya = sum((total_rencana(p) or 0) for p in projects.values())
-    total_luas = sum((luas_proj(p) or 0) for p in projects.values())
-    n_real = sum(1 for p in projects.values() if has_any_realisasi(p))
-    by_jenis = {}
-    for p in projects.values():
-        by_jenis[project_jenis(p)] = by_jenis.get(project_jenis(p), 0) + (total_rencana(p) or 0)
-    tanaman_pct = (by_jenis.get("Tanaman", 0) / total_biaya * 100) if total_biaya else 0
 
-    st.markdown(
-        f"""
-        <div class="hero-band-slim">
-          <p class="hero-eyebrow" style="margin:0">🌴 MONITORING RKP &middot; {len(projects)} PROYEK TERFILTER</p>
-          <p class="hero-title">Ringkasan Portofolio</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    c1, c2 = st.columns(2)
+    c1.metric("Total Proyek", len(projects))
+    c2.metric("Nilai Proyek", fmt_rp(total_biaya), fmt_rp_full(total_biaya))
 
-    kpi_items = [
-        (fmt_rp(total_biaya), "Total Investasi"),
-        (fmt_ha(total_luas), "Total Luas"),
-        (str(len(projects)), "Jumlah Proyek"),
-        (f"{tanaman_pct:.0f}%", "Tanaman"),
-        (f"{100-tanaman_pct:.0f}%", "Infrastruktur"),
-        (f"{n_real}/{len(projects)}", "Ada Realisasi"),
-    ]
-    st.markdown(
-        '<div class="kpi-strip">' +
-        "".join(
-            f'<div class="kpi-strip-item"><div class="kpi-strip-num">{val}</div>'
-            f'<div class="kpi-strip-lbl">{lbl}</div></div>'
-            for val, lbl in kpi_items
-        ) +
-        '</div>',
-        unsafe_allow_html=True,
-    )
-    st.write("")
+    st.markdown("#### Rekap Proyek — Biaya vs Realisasi")
+    st.caption("Klik satu baris untuk membuka detail proyek itu.")
+
+    col_l, col_r = st.columns([2, 1])
+    with col_l:
+        recap_rows = [
+            {
+                "Proyek": p["meta"]["name"],
+                "Perusahaan": p["meta"]["company"],
+                "Biaya Rencana": total_rencana(p),
+                "Realisasi": realisasi_total(p),
+                "Capaian (%)": capaian_biaya_pct(p),
+            }
+            for p in projects.values()
+        ]
+        recap_df = pd.DataFrame(recap_rows)
+        event = st.dataframe(
+            recap_df, use_container_width=True, hide_index=True, height=420,
+            column_config={
+                "Biaya Rencana": st.column_config.NumberColumn(format="Rp %d"),
+                "Realisasi": st.column_config.NumberColumn(format="Rp %d"),
+                "Capaian (%)": st.column_config.NumberColumn(format="%.1f%%"),
+            },
+            on_select="rerun", selection_mode="single-row", key="recap_table",
+        )
+        try:
+            sel_rows = event.selection.rows
+        except Exception:
+            sel_rows = []
+        if sel_rows:
+            st.session_state["detail_project"] = recap_df.iloc[sel_rows[0]]["Proyek"]
+            st.session_state["section"] = "📁 Detail Proyek"
+            st.rerun()
+
+    with col_r:
+        st.markdown("##### Proyek per Perusahaan")
+        by_company = {}
+        for p in projects.values():
+            by_company[p["meta"]["company"]] = by_company.get(p["meta"]["company"], 0) + 1
+        fig_pie = go.Figure(go.Pie(
+            labels=list(by_company.keys()), values=list(by_company.values()), hole=0.45,
+            marker=dict(colors=PALETTE[:len(by_company)]),
+            textinfo="label+value", textfont=dict(color="#C9D1D9", size=11),
+        ))
+        fig_pie.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
+                               paper_bgcolor="#141A26")
+        st.plotly_chart(fig_pie, use_container_width=True, theme=None)
 
     unreliable_names = [p["meta"]["name"] for p in projects.values() if not p["rencana"].get("items_reliable", True)]
-    no_real_count = len(projects) - n_real
+    no_real_count = sum(1 for p in projects.values() if not has_any_realisasi(p))
     alerts = []
     if unreliable_names:
         alerts.append(f"<b>{len(unreliable_names)} proyek</b> rincian pekerjaannya belum bisa direkonsiliasi otomatis — {', '.join(unreliable_names)}. Total biaya proyeknya sendiri tetap akurat.")
     if no_real_count:
-        alerts.append(f"<b>{no_real_count} dari {len(projects)} proyek</b> belum ada data realisasi. Upload sheet Realisasi resmi untuk mulai membandingkan Rencana vs Realisasi.")
+        alerts.append(f"<b>{no_real_count} dari {len(projects)} proyek</b> belum ada data realisasi.")
     if alerts:
-        st.markdown(
-            '<div class="footnote" style="background:#F5E4DA;">⚠️ &nbsp;' + '<br><br>⚠️ &nbsp;'.join(alerts) + '</div>',
-            unsafe_allow_html=True,
-        )
-
-    projects_with_real = [p for p in projects.values() if has_any_realisasi(p)]
-    if projects_with_real:
-        st.markdown("#### Capaian Realisasi vs RKP")
-        total_rencana_real = sum(total_rencana(p) or 0 for p in projects_with_real)
-        total_real_biaya = sum(realisasi_total(p) or 0 for p in projects_with_real)
-        capaian_biaya_agg = (total_real_biaya / total_rencana_real * 100) if total_rencana_real else None
-
-        fisik_projects = [p for p in projects_with_real if capaian_fisik_pct(p) is not None]
-        rc1, rc2, rc3 = st.columns(3)
-        rc1.metric("Proyek dengan Realisasi", f"{len(projects_with_real)} / {len(projects)}")
-        rc2.metric("Capaian Biaya (agregat)", f"{capaian_biaya_agg:.1f}%" if capaian_biaya_agg is not None else "—",
-                   f"{fmt_rp(total_real_biaya)} dari {fmt_rp(total_rencana_real)}")
-        if fisik_projects:
-            avg_fisik = sum(capaian_fisik_pct(p) for p in fisik_projects) / len(fisik_projects)
-            rc3.metric("Capaian Fisik (rata-rata)", f"{avg_fisik:.1f}%", f"{len(fisik_projects)} proyek terukur")
-        else:
-            rc3.metric("Capaian Fisik (rata-rata)", "—", "belum ada proyek dengan data fisik cocok")
-
-    col_l, col_r = st.columns([1.4, 1])
-    with col_l:
-        st.markdown("#### Peringkat Semua Proyek Berdasarkan Nilai")
-        plist = sorted(projects.values(), key=lambda p: -(total_rencana(p) or 0))
-        names = [p["meta"]["name"] for p in plist]
-        vals = [total_rencana(p) or 0 for p in plist]
-        bar_colors = [JENIS_COLORS.get(project_jenis(p), "#7C9A85") for p in plist]
-        fig_rank = go.Figure(go.Bar(
-            x=vals, y=names, orientation="h", marker_color=bar_colors,
-            text=[fmt_rp(v) for v in vals], textposition="outside",
-        ))
-        fig_rank.update_layout(height=max(280, 42 * len(names)), margin=dict(l=10, r=60, t=10, b=10),
-                                xaxis_title="Rp", plot_bgcolor="#141A26", paper_bgcolor="#141A26",
-                                font=dict(color="#C9D1D9", size=12),
-                                xaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9"),
-                                yaxis=dict(color="#C9D1D9", automargin=True, categoryorder="array", categoryarray=names[::-1]))
-        st.plotly_chart(fig_rank, use_container_width=True, theme=None)
-
-    with col_r:
-        st.markdown("#### Distribusi per Jenis")
-        fig_donut = go.Figure(go.Pie(
-            labels=list(by_jenis.keys()), values=list(by_jenis.values()), hole=0.6,
-            marker=dict(colors=[JENIS_COLORS.get(j, "#7C9A85") for j in by_jenis]),
-            textinfo="label+percent", textfont=dict(color="#C9D1D9", size=12),
-        ))
-        fig_donut.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10),
-                                 showlegend=False, paper_bgcolor="#141A26")
-        st.plotly_chart(fig_donut, use_container_width=True, theme=None)
-
-        st.markdown("#### Per Perusahaan")
-        by_company = {}
-        for p in projects.values():
-            by_company[p["meta"]["company"]] = by_company.get(p["meta"]["company"], 0) + (total_rencana(p) or 0)
-        fig_comp = go.Figure(go.Bar(
-            x=list(by_company.values()), y=list(by_company.keys()), orientation="h",
-            marker_color=PALETTE[:len(by_company)],
-            text=[fmt_rp(v) for v in by_company.values()], textposition="outside",
-        ))
-        fig_comp.update_layout(height=max(140, 50 * len(by_company)), margin=dict(l=10, r=60, t=10, b=10),
-                                plot_bgcolor="#141A26", paper_bgcolor="#141A26",
-                                font=dict(color="#C9D1D9", size=12),
-                                xaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9"),
-                                yaxis=dict(color="#C9D1D9", automargin=True))
-        st.plotly_chart(fig_comp, use_container_width=True, theme=None)
-
-    st.markdown("#### Jelajahi Lebih Lanjut")
-    b1, b2, b3 = st.columns(3)
-    with b1:
-        st.button("📋 Portofolio", use_container_width=True, on_click=_go_section, args=("📋 Portofolio",))
-        st.caption("Tabel lengkap semua proyek, bisa diurut & difilter")
-    with b2:
-        st.button("🏢 Per Perusahaan", use_container_width=True, on_click=_go_section, args=("🏢 Per Perusahaan",))
-        st.caption("Rekap investasi & daftar proyek tiap perusahaan")
-    with b3:
-        st.button("📁 Detail Proyek", use_container_width=True, on_click=_go_section, args=("📁 Detail Proyek",))
-        st.caption("Jadwal, Kurva-S, rincian pekerjaan per proyek")
+        st.markdown('<div class="footnote">⚠️ &nbsp;' + '<br><br>⚠️ &nbsp;'.join(alerts) + '</div>', unsafe_allow_html=True)
 
 # ================================================================
-# PORTOFOLIO (dulu "Ringkasan": tabel + grafik semua proyek terfilter)
+# FITUR 2 — DETAIL PROYEK
 # ================================================================
-elif section == "📋 Portofolio":
-    st.title("📋 Portofolio Proyek")
-    total_biaya = sum((total_rencana(p) or 0) for p in projects.values())
-    total_luas = sum((luas_proj(p) or 0) for p in projects.values())
-    avg_rp_ha = total_biaya / total_luas if total_luas else None
-    n_real = sum(1 for p in projects.values() if has_any_realisasi(p))
+else:
+    proj_names = [p["meta"]["name"] for p in projects.values()]
+    if st.session_state.get("detail_project") not in proj_names:
+        st.session_state["detail_project"] = proj_names[0]
 
-    top_l, top_r = st.columns([3, 1])
-    with top_l:
-        st.caption(f"{len(projects)} proyek terfilter · diperbarui {datetime.now().strftime('%d %b %Y')}")
-    with top_r:
-        export_df = pd.DataFrame([
-            {
-                "Proyek": p["meta"]["name"],
-                "Perusahaan": p["meta"]["company"],
-                "Jenis": project_jenis(p),
-                "Luas (Ha)": luas_proj(p),
-                "Total Biaya Rencana": total_rencana(p),
-                "Biaya / Ha": rp_per_ha(p),
-                "Status Realisasi": "Tersedia" if has_realisasi(p) else ("Total saja" if has_any_realisasi(p) else "Belum ada"),
-            }
-            for p in projects.values()
-        ])
-        xbuf = io.BytesIO()
-        with pd.ExcelWriter(xbuf, engine="openpyxl") as writer:
-            export_df.to_excel(writer, sheet_name="Ringkasan Proyek", index=False)
-        st.download_button(
-            "📥 Export Excel", data=xbuf.getvalue(), file_name="ringkasan_rkp.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Jumlah Proyek", len(projects), f"{n_real} dengan realisasi")
-    c2.metric("Total Luas", fmt_ha(total_luas))
-    c3.metric("Total Biaya Rencana", fmt_rp(total_biaya), fmt_rp_full(total_biaya))
-    c4.metric("Rata-rata Biaya / Ha", fmt_rp(avg_rp_ha))
-
-    st.markdown("#### Tabel Proyek")
-    st.caption("Klik header kolom untuk mengurutkan.")
-    table_df = pd.DataFrame([
-        {
-            "Proyek": p["meta"]["name"],
-            "Perusahaan": p["meta"]["company"],
-            "Jenis": project_jenis(p),
-            "Luas (Ha)": luas_proj(p),
-            "Total Biaya": total_rencana(p),
-            "Biaya / Ha": rp_per_ha(p),
-            "Progres Waktu (%)": project_time_progress_pct(p),
-            "Capaian Biaya (%)": capaian_biaya_pct(p),
-            "Capaian Fisik (%)": capaian_fisik_pct(p),
-            "Status Realisasi": "Tersedia" if has_realisasi(p) else ("Total saja" if has_any_realisasi(p) else "Belum ada"),
-        }
-        for p in projects.values()
-    ])
-    st.dataframe(
-        table_df, use_container_width=True, hide_index=True,
-        column_config={
-            "Luas (Ha)": st.column_config.NumberColumn(format="%.2f"),
-            "Total Biaya": st.column_config.NumberColumn(format="Rp %d"),
-            "Biaya / Ha": st.column_config.NumberColumn(format="Rp %d"),
-            "Progres Waktu (%)": st.column_config.ProgressColumn(format="%.0f%%", min_value=0, max_value=100),
-            "Capaian Biaya (%)": st.column_config.NumberColumn(format="%.1f%%"),
-            "Capaian Fisik (%)": st.column_config.NumberColumn(format="%.1f%%"),
-        },
-    )
-
-    st.markdown("#### Perbandingan Biaya Antar Proyek")
-    st.caption("Warna batang menandakan Jenis Proyek — lihat legenda di bawah grafik.")
-    mode = st.radio("Mode", ["Total Biaya", "Biaya / Ha"], horizontal=True, label_visibility="collapsed")
-    plist = sorted(projects.values(), key=lambda p: (project_jenis(p), -(total_rencana(p) or 0)))
-    names = [p["meta"]["name"] for p in plist]
-    vals = [
-        (total_rencana(p) or 0) if mode == "Total Biaya" else (rp_per_ha(p) or 0)
-        for p in plist
-    ]
-    bar_colors = [JENIS_COLORS.get(project_jenis(p), "#7C9A85") for p in plist]
-    fig = go.Figure(go.Bar(
-        x=vals, y=names, orientation="h", marker_color=bar_colors,
-        text=[fmt_rp(v) for v in vals], textposition="outside",
-    ))
-    for jenis, color in JENIS_COLORS.items():
-        if jenis in {project_jenis(p) for p in plist}:
-            fig.add_bar(x=[None], y=[None], marker_color=color, name=jenis, showlegend=True)
-    fig.update_layout(height=100 + 60 * len(names), margin=dict(l=10, r=40, t=10, b=10),
-                       xaxis_title="Rp", plot_bgcolor="#141A26", paper_bgcolor="#141A26",
-                       font=dict(color="#C9D1D9", size=13), barmode="overlay",
-                       legend=dict(orientation="h", y=-0.12, font=dict(color="#C9D1D9", size=11)),
-                       xaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9"),
-                       yaxis=dict(color="#C9D1D9", automargin=True, categoryorder="array", categoryarray=names[::-1]))
-    st.plotly_chart(fig, use_container_width=True, theme=None)
-
-    st.markdown("#### Target Fisik per Periode (Catur Wulan) — Semua Proyek")
-    st.caption("Hanya proyek yang punya jadwal periode (perkebunan/konstruksi) yang muncul di sini.")
-    keys = all_period_keys(projects)
-    fig2 = go.Figure()
-    for i, p in enumerate(projects.values()):
-        g = p["rencana"]["grand"]
-        m = {pd_["key"]: pd_["fisik"] for pd_ in (g["periods"] if g else [])}
-        fig2.add_bar(name=p["meta"]["name"], x=keys, y=[m.get(k, 0) for k in keys],
-                     marker_color=PALETTE[i % len(PALETTE)])
-    fig2.update_layout(barmode="stack", height=380, margin=dict(l=10, r=10, t=10, b=10),
-                        yaxis_title="Ha", plot_bgcolor="#141A26", paper_bgcolor="#141A26",
-                        legend=dict(orientation="h", y=-0.3, font=dict(color="#C9D1D9", size=11)),
-                        font=dict(color="#C9D1D9", size=13),
-                        xaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9"),
-                        yaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9", automargin=True))
-    add_now_marker(fig2, keys, "periode")
-    add_now_marker(fig2, keys, "tahunan")
-    st.plotly_chart(fig2, use_container_width=True, theme=None)
-
-    st.markdown("#### Kurva-S Kumulatif Biaya Rencana — Semua Proyek")
-    st.caption("Akumulasi biaya rencana dari waktu ke waktu. Hanya proyek berjadwal periode yang tampil; garis putus-putus menandai periode berjalan saat ini.")
-    fig_s = go.Figure()
-    any_scurve = False
-    for i, p in enumerate(projects.values()):
-        g = p["rencana"]["grand"]
-        if not g or not g["periods"]:
-            continue
-        any_scurve = True
-        m = {pd_["key"]: pd_["biaya"] for pd_ in g["periods"]}
-        vals_s, running = [], 0
-        for k in keys:
-            running += m.get(k, 0)
-            vals_s.append(running)
-        fig_s.add_scatter(x=keys, y=vals_s, mode="lines+markers", name=p["meta"]["name"],
-                           line=dict(color=PALETTE[i % len(PALETTE)], width=2.5))
-    if any_scurve:
-        fig_s.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10),
-                             yaxis_title="Rp (kumulatif)", plot_bgcolor="#141A26", paper_bgcolor="#141A26",
-                             legend=dict(orientation="h", y=-0.3, font=dict(color="#C9D1D9", size=11)),
-                             font=dict(color="#C9D1D9", size=13),
-                             xaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9"),
-                             yaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9", tickformat=",.0f"))
-        add_now_marker(fig_s, keys, "periode")
-        add_now_marker(fig_s, keys, "tahunan")
-        st.plotly_chart(fig_s, use_container_width=True, theme=None)
-    else:
-        st.info("Tidak ada proyek berjadwal periode pada filter saat ini.")
-
-    st.markdown("#### Pekerjaan & Biaya — Semua Proyek")
-    st.caption("Semua jenis pekerjaan (level sama seperti tabel Rincian Pekerjaan) digabung lintas proyek yang terfilter.")
-
-    unreliable_names = [p["meta"]["name"] for p in projects.values() if not p["rencana"].get("items_reliable", True)]
-
-    work_rows = []
-    for p in projects.values():
-        if not p["rencana"].get("items_reliable", True):
-            continue
-        for it in p["rencana"]["items"]:
-            work_rows.append({
-                "Pekerjaan": it["nama"],
-                "Proyek": p["meta"]["name"],
-                "Volume (Ha)": it["volume_ha"] or 0,
-                "Biaya Rencana": it["biaya_rencana"] or 0,
-            })
-    work_df = pd.DataFrame(work_rows)
-
-    if unreliable_names:
-        st.caption(
-            "⚠️ " + ", ".join(unreliable_names) + " tidak disertakan di sini karena rincian per "
-            "pekerjaannya tidak bisa direkonsiliasi otomatis dengan total rencananya (struktur subtotal "
-            "berlapis di file sumber). Total biaya proyek itu sendiri tetap akurat — lihat di halaman "
-            "Ringkasan atau detail proyeknya masing-masing."
-        )
-
-    if work_df.empty:
-        st.info("Belum ada rincian pekerjaan pada proyek yang terfilter.")
-    else:
-        agg = (
-            work_df.groupby("Pekerjaan", as_index=False)
-            .agg(**{
-                "Total Biaya": ("Biaya Rencana", "sum"),
-                "Total Volume (Ha)": ("Volume (Ha)", "sum"),
-                "Jumlah Proyek": ("Proyek", "nunique"),
-            })
-            .sort_values("Total Biaya", ascending=False)
-        )
-        agg["Rp / Ha"] = agg["Total Biaya"] / agg["Total Volume (Ha)"].replace(0, pd.NA)
-
-        fig5 = go.Figure(go.Bar(
-            x=agg["Total Biaya"], y=agg["Pekerjaan"], orientation="h",
-            marker_color=GOLD, text=[fmt_rp(v) for v in agg["Total Biaya"]], textposition="outside",
-        ))
-        fig5.update_layout(
-            height=max(220, 46 * len(agg)), margin=dict(l=10, r=40, t=10, b=10),
-            xaxis_title="Rp", plot_bgcolor="#141A26", paper_bgcolor="#141A26",
-            font=dict(color="#C9D1D9", size=13),
-            xaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9"),
-            yaxis=dict(color="#C9D1D9", automargin=True, categoryorder="total ascending"),
-        )
-        st.plotly_chart(fig5, use_container_width=True, theme=None)
-
-        with st.expander("📋 Lihat tabel rincian per pekerjaan & proyek"):
-            st.markdown("**Ringkasan per jenis pekerjaan (digabung semua proyek)**")
-            st.dataframe(
-                agg, use_container_width=True, hide_index=True,
-                column_config={
-                    "Total Biaya": st.column_config.NumberColumn(format="Rp %d"),
-                    "Total Volume (Ha)": st.column_config.NumberColumn(format="%.2f"),
-                    "Rp / Ha": st.column_config.NumberColumn(format="Rp %d"),
-                },
-            )
-            st.markdown("**Rincian per proyek**")
-            detail_df = work_df.sort_values(["Pekerjaan", "Proyek"])
-            st.dataframe(
-                detail_df, use_container_width=True, hide_index=True,
-                column_config={
-                    "Volume (Ha)": st.column_config.NumberColumn(format="%.2f"),
-                    "Biaya Rencana": st.column_config.NumberColumn(format="Rp %d"),
-                },
-            )
-
-    st.markdown("#### Daftar Proyek")
-    cols = st.columns(3)
-    for i, p in enumerate(projects.values()):
-        with cols[i % 3]:
-            real = has_any_realisasi(p)
-            badge = '<span class="badge-ok">Ada realisasi</span>' if real else '<span class="badge-wait">Rencana saja</span>'
-            st.markdown(
-                f"""
-                <div style="background:#fff;border:1px solid #E1E3D9;border-radius:12px;padding:14px 16px;margin-bottom:12px;">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-                  <div>
-                    <b>{p['meta']['name']}</b><br>
-                    <span style="color:#6C7566;font-size:12.5px;">{p['meta']['company']}</span>
-                  </div>
-                  {badge}
-                </div>
-                <div style="margin-top:8px;font-size:13px;color:#6C7566;">📐 {fmt_ha(luas_proj(p))} &nbsp;·&nbsp; 📅 {p['meta']['periode_text'] or '—'}</div>
-                <div style="margin-top:8px;display:flex;justify-content:space-between;">
-                  <div><b style="color:{FOREST};">{fmt_rp(total_rencana(p))}</b><br><span style="font-size:11px;color:#6C7566;">total rencana</span></div>
-                  <div style="text-align:right;"><b style="color:{FOREST};">{fmt_rp(rp_per_ha(p))}</b><br><span style="font-size:11px;color:#6C7566;">per Ha</span></div>
-                </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-# ================================================================
-# PER PERUSAHAAN
-# ================================================================
-elif section == "🏢 Per Perusahaan":
-    st.title("🏢 Per Perusahaan")
-    companies = sorted({p["meta"]["company"] for p in projects.values()})
-    st.caption(f"{len(companies)} perusahaan pada filter saat ini.")
-
-    for c in companies:
-        comp_projects = [p for p in projects.values() if p["meta"]["company"] == c]
-        total_c = sum(total_rencana(p) or 0 for p in comp_projects)
-        luas_c = sum(luas_proj(p) or 0 for p in comp_projects)
-        n_real_c = sum(1 for p in comp_projects if has_any_realisasi(p))
-
-        st.markdown(f"### {c}")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Jumlah Proyek", len(comp_projects), f"{n_real_c} dengan realisasi")
-        c2.metric("Total Biaya", fmt_rp(total_c), fmt_rp_full(total_c))
-        c3.metric("Total Luas", fmt_ha(luas_c))
-
-        comp_df = pd.DataFrame([
-            {
-                "Proyek": p["meta"]["name"],
-                "Jenis": project_jenis(p),
-                "Luas (Ha)": luas_proj(p),
-                "Total Biaya": total_rencana(p),
-                "Biaya / Ha": rp_per_ha(p),
-                "Status Realisasi": "Tersedia" if has_realisasi(p) else ("Total saja" if has_any_realisasi(p) else "Belum ada"),
-            }
-            for p in sorted(comp_projects, key=lambda p: -(total_rencana(p) or 0))
-        ])
-        st.dataframe(
-            comp_df, use_container_width=True, hide_index=True,
-            column_config={
-                "Luas (Ha)": st.column_config.NumberColumn(format="%.2f"),
-                "Total Biaya": st.column_config.NumberColumn(format="Rp %d"),
-                "Biaya / Ha": st.column_config.NumberColumn(format="Rp %d"),
-            },
-        )
-        st.divider()
-
-# ================================================================
-# DETAIL SATU PROYEK (dipilih lewat dropdown sidebar)
-# ================================================================
-elif section == "📁 Detail Proyek":
-    selected_view = st.session_state.get("detail_project")
-    p = next((pp for pp in projects.values() if pp["meta"]["name"] == selected_view), None)
-    if p is None:
-        st.warning("Proyek tidak ditemukan pada hasil filter saat ini. Kembali ke Ringkasan.")
-        st.stop()
+    f1, f2, f3, f4, f5 = st.columns([1.6, 1, 1, 1, 1])
+    with f1:
+        st.selectbox("Filter Proyek", proj_names, key="detail_project")
+    p = next(pp for pp in projects.values() if pp["meta"]["name"] == st.session_state["detail_project"])
 
     real = has_realisasi(p)
     any_real = has_any_realisasi(p)
-    total = total_rencana(p)
-    luas = luas_proj(p)
+    cb = capaian_biaya_pct(p)
+    cf = capaian_fisik_pct(p)
 
-    st.title(f"📁 {p['meta']['name']}")
-    st.caption(f"{p['meta']['company']}" + (f" · {p['meta']['desc']}" if p["meta"]["desc"] else "") +
-               (f" · {p['meta']['periode_text']}" if p["meta"]["periode_text"] else ""))
+    f2.metric("Pimpinan Proyek", "—")
+    f3.metric("Kategori Proyek", project_jenis(p))
+    f4.metric("Progres Biaya", f"{cb:.1f}%" if cb is not None else "—")
+    f5.metric("Progres Fisik", f"{cf:.1f}%" if cf is not None else "—")
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Luas", fmt_ha(luas))
-    c2.metric("Total Biaya Rencana", fmt_rp(total), fmt_rp_full(total))
-    c3.metric("Biaya / Ha", fmt_rp(rp_per_ha(p)))
-    status_label = "Tersedia" if real else ("Total saja" if any_real else "Belum ada")
-    c4.metric("Status Realisasi", status_label)
-
-    if any_real:
-        cb, cf = capaian_biaya_pct(p), capaian_fisik_pct(p)
-        d1, d2 = st.columns(2)
-        d1.metric("Capaian Realisasi Biaya vs RKP", f"{cb:.1f}%" if cb is not None else "—",
-                  f"{fmt_rp(realisasi_total(p))} dari {fmt_rp(total)}" if cb is not None else None)
-        d2.metric("Capaian Realisasi Fisik vs RKP", f"{cf:.1f}%" if cf is not None else "—",
-                  None if cf is not None else "butuh realisasi per-periode yang cocok")
-
-    yr_range = project_year_range(p)
-    if yr_range:
-        start_y, end_y = yr_range
-        now = datetime.now()
-        frac_now = now.year + (now.month - 1) / 12
-        total_span = (end_y + 1) - start_y
-        pct = max(0, min(100, (frac_now - start_y) / total_span * 100)) if total_span > 0 else None
-        if pct is not None:
-            st.markdown(f"**⏱️ Progres Waktu Proyek** — Tahun {start_y} s.d {end_y}")
-            st.progress(int(pct))
-            st.caption(f"Proyek ini seharusnya sudah berjalan sekitar **{pct:.0f}%** dari total durasi rencananya (berdasarkan kalender, bukan realisasi biaya).")
-
-    if any_real and not real:
-        rt = realisasi_total(p)
-        capaian = (rt / total * 100) if (rt is not None and total) else None
+    st.markdown(f"#### {p['meta']['name']}")
+    st.caption(
+        f"{p['meta']['company']} · {fmt_rp(total_rencana(p))} total rencana"
+        + (f" · {fmt_ha(luas_proj(p))}" if luas_proj(p) else "")
+        + (f" · {p['meta']['periode_text']}" if p["meta"]["periode_text"] else "")
+    )
+    if not any_real:
         st.markdown(
-            f"""<div class="footnote">📊 Ada angka realisasi (total) untuk proyek ini: <b>{fmt_rp_full(rt)}</b>
-            {f"— sekitar <b>{capaian:.1f}%</b> dari rencana." if capaian is not None else ""}
-            Rinciannya belum bisa dipecah per pekerjaan karena struktur sheet realisasi berbeda dari sheet
-            rencananya.</div>""",
-            unsafe_allow_html=True,
-        )
-    elif not any_real:
-        st.markdown(
-            """<div class="footnote">📋 File ini belum berisi data realisasi (kolom/sheet "Realisasi" tidak
-            terdeteksi, atau sheet tersebut ternyata bukan untuk proyek ini). Tambahkan sheet baru bernama
-            mengandung kata <b>Realisasi</b> dengan struktur tabel yang mirip sheet rencananya, lalu upload
-            ulang — dashboard otomatis akan menampilkan perbandingan Rencana vs Realisasi di sini.</div>""",
+            '<div class="footnote">📋 Belum ada data realisasi untuk proyek ini. Tambahkan sheet '
+            '<b>Realisasi</b> dengan struktur serupa sheet rencananya untuk mulai membandingkan.</div>',
             unsafe_allow_html=True,
         )
 
-    g = p["rencana"]["grand"]
-    keys = [pd_["key"] for pd_ in g["periods"]] if g else []
+    col_l, col_r = st.columns([1.6, 1])
+    with col_l:
+        st.markdown("##### Grafik Progres Proyek")
+        g = p["rencana"]["grand"]
+        keys = [pd_["key"] for pd_ in g["periods"]] if g else []
+        if keys:
+            cum_vals, running = [], 0
+            for pd_ in g["periods"]:
+                running += pd_["biaya"]
+                cum_vals.append(running)
+            fig_line = go.Figure()
+            fig_line.add_scatter(x=keys, y=cum_vals, mode="lines+markers", name="Rencana (kumulatif)",
+                                  line=dict(color=FOREST_LIGHT, width=3))
+            if real and p["realisasi"]["data"]["grand"]:
+                rmap = {pd_["key"]: pd_["biaya"] for pd_ in p["realisasi"]["data"]["grand"]["periods"]}
+                cum_real, running_r = [], 0
+                for k in keys:
+                    running_r += rmap.get(k, 0)
+                    cum_real.append(running_r)
+                fig_line.add_scatter(x=keys, y=cum_real, mode="lines+markers", name="Realisasi (kumulatif)",
+                                      line=dict(color=GOLD, width=3))
+            fig_line.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10),
+                                    plot_bgcolor="#141A26", paper_bgcolor="#141A26",
+                                    legend=dict(orientation="h", y=-0.2, font=dict(color="#C9D1D9")),
+                                    font=dict(color="#C9D1D9", size=12),
+                                    xaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9"),
+                                    yaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9", tickformat=",.0f"))
+            add_now_marker(fig_line, keys, p["format"])
+            st.plotly_chart(fig_line, use_container_width=True, theme=None)
+        else:
+            st.info("Proyek ini tidak memiliki jadwal periode (Catur Wulan/Tahun) untuk ditampilkan sebagai grafik garis.")
 
-    if not keys:
-        st.info("Proyek ini tidak memiliki breakdown per periode (Catur Wulan/Tahun) — hanya total biaya per pekerjaan di bawah.")
-    else:
-        period_label = "Tahun" if keys[0].startswith("Tahun ") else "Catur Wulan"
-        st.markdown(f"#### Biaya per Periode ({period_label})")
-        rencana_vals = [pd_["biaya"] for pd_ in g["periods"]]
-        fig3 = go.Figure()
-        fig3.add_bar(name="Rencana", x=keys, y=rencana_vals, marker_color=FOREST)
-        if real and p["realisasi"]["data"]["grand"]:
-            rmap = {pd_["key"]: pd_["biaya"] for pd_ in p["realisasi"]["data"]["grand"]["periods"]}
-            fig3.add_bar(name="Realisasi", x=keys, y=[rmap.get(k, 0) for k in keys], marker_color=GOLD)
-        fig3.update_layout(barmode="group", height=320, margin=dict(l=10, r=10, t=10, b=10),
-                            plot_bgcolor="#141A26", paper_bgcolor="#141A26",
-                            legend=dict(orientation="h", y=-0.2, font=dict(color="#C9D1D9")),
-                            font=dict(color="#C9D1D9", size=13),
-                            xaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9"),
-                            yaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9"))
-        add_now_marker(fig3, keys, p["format"])
-        st.plotly_chart(fig3, use_container_width=True, key=f"biaya_{p['id']}", theme=None)
-
-        st.markdown("#### Kurva-S Kumulatif Biaya Rencana")
-        cum_vals, running = [], 0
-        for v in rencana_vals:
-            running += v
-            cum_vals.append(running)
-        fig_s1 = go.Figure()
-        fig_s1.add_scatter(x=keys, y=cum_vals, mode="lines+markers", name="Rencana (kumulatif)",
-                            line=dict(color=FOREST, width=3))
-        if real and p["realisasi"]["data"]["grand"]:
-            rmap = {pd_["key"]: pd_["biaya"] for pd_ in p["realisasi"]["data"]["grand"]["periods"]}
-            cum_real, running_r = [], 0
-            for k in keys:
-                running_r += rmap.get(k, 0)
-                cum_real.append(running_r)
-            fig_s1.add_scatter(x=keys, y=cum_real, mode="lines+markers", name="Realisasi (kumulatif)",
-                                line=dict(color=GOLD, width=3))
-        fig_s1.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10),
-                              plot_bgcolor="#141A26", paper_bgcolor="#141A26",
-                              legend=dict(orientation="h", y=-0.2, font=dict(color="#C9D1D9")),
-                              font=dict(color="#C9D1D9", size=13),
-                              xaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9"),
-                              yaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9", tickformat=",.0f"))
-        add_now_marker(fig_s1, keys, p["format"])
-        st.plotly_chart(fig_s1, use_container_width=True, key=f"scurve_{p['id']}", theme=None)
-
-    items_reliable = p["rencana"].get("items_reliable", True)
-    if not items_reliable:
-        st.warning(
-            "⚠️ Rincian per pekerjaan di bawah ini kemungkinan **tidak sepenuhnya akurat** — struktur "
-            "subtotal berlapis pada file sumber membuat sebagian baris berpotensi terhitung dobel atau "
-            "malah terlewat. Total Biaya Rencana pada kartu di atas tetap akurat (diambil langsung dari "
-            "baris Grand Total/Total di file, bukan dari penjumlahan baris di bawah)."
-        )
-
-    st.markdown("#### Komposisi Biaya per Pekerjaan")
-    items = [it for it in p["rencana"]["items"] if it["biaya_rencana"]]
-    items = sorted(items, key=lambda x: -x["biaya_rencana"])
-    fig4 = px.pie(
-        names=[it["nama"] for it in items],
-        values=[it["biaya_rencana"] for it in items],
-        color_discrete_sequence=PALETTE, hole=0.55,
-    )
-    fig4.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10),
-                        plot_bgcolor="#141A26", paper_bgcolor="#141A26",
-                        font=dict(color="#C9D1D9", size=13),
-                        legend=dict(font=dict(color="#C9D1D9")))
-    fig4.update_traces(textfont=dict(color="#C9D1D9"))
-    st.plotly_chart(fig4, use_container_width=True, key=f"comp_{p['id']}", theme=None)
-
-    st.markdown("#### Rincian Pekerjaan" + ("" if items_reliable else " ⚠️"))
-    real_map = {}
-    if real:
-        for it in p["realisasi"]["data"]["items"]:
-            real_map[it["nama"]] = it["biaya_rencana"]
-
-    rows_table = []
-    for it in p["rencana"]["items"]:
-        r_biaya = real_map.get(it["nama"])
-        capaian = (r_biaya / it["biaya_rencana"] * 100) if (real and r_biaya and it["biaya_rencana"]) else None
-        rows_table.append({
-            "No": it["no"],
-            "Pekerjaan": it["nama"],
-            "Volume (Ha)": it["volume_ha"],
-            "Biaya Rencana": it["biaya_rencana"],
-            "Rp / Ha": it["rp_per_ha"],
-            "Realisasi Biaya": r_biaya if real else None,
-            "% Capaian": round(capaian, 1) if capaian is not None else None,
-        })
-    df = pd.DataFrame(rows_table)
-    st.dataframe(
-        df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Volume (Ha)": st.column_config.NumberColumn(format="%.2f"),
-            "Biaya Rencana": st.column_config.NumberColumn(format="Rp %d"),
-            "Rp / Ha": st.column_config.NumberColumn(format="Rp %d"),
-            "Realisasi Biaya": st.column_config.NumberColumn(format="Rp %d"),
-            "% Capaian": st.column_config.NumberColumn(format="%.1f%%"),
-        },
-    )
+    with col_r:
+        st.markdown("##### Sub Pekerjaan")
+        items = sorted([it for it in p["rencana"]["items"] if it["biaya_rencana"]], key=lambda x: -x["biaya_rencana"])
+        if items:
+            fig_pie2 = go.Figure(go.Pie(
+                labels=[it["nama"] for it in items], values=[it["biaya_rencana"] for it in items],
+                hole=0.45, marker=dict(colors=PALETTE), textinfo="percent",
+                textfont=dict(color="#C9D1D9", size=10),
+            ))
+            fig_pie2.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10),
+                                    paper_bgcolor="#141A26",
+                                    legend=dict(font=dict(color="#C9D1D9", size=10)))
+            st.plotly_chart(fig_pie2, use_container_width=True, theme=None)
+            if not p["rencana"].get("items_reliable", True):
+                st.caption("⚠️ Rincian ini mungkin tidak sepenuhnya akurat — struktur subtotal berlapis di file sumber. Total Biaya Rencana di atas tetap akurat.")
+        else:
+            st.info("Belum ada rincian pekerjaan.")
