@@ -74,14 +74,14 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-FOREST = "#123524"
-FOREST_LIGHT = "#3C7A5A"
-GOLD = "#C08A2E"
-GOLD_LIGHT = "#E8C776"
+FOREST = "#0F5C56"
+FOREST_LIGHT = "#1B8577"
+GOLD = "#E8A33D"
+GOLD_LIGHT = "#F4C878"
 RUST = "#B25330"
-INK = "#16231A"
-IVORY = "#F6F4EE"
-PALETTE = ["#123524", "#C08A2E", "#3C7A5A", "#B25330", "#7C9A85", "#8C6A2E", "#4E6B57", "#D9AE63"]
+INK = "#132A26"
+IVORY = "#F5FAF9"
+PALETTE = ["#0F5C56", "#E8A33D", "#1B8577", "#B25330", "#5FB8AC", "#8FD4C8", "#0B443F", "#2FA89A"]
 
 st.markdown(
     f"""
@@ -118,7 +118,7 @@ st.markdown(
 
     /* ---------- KPI metric cards: aksen tepi kiri berwarna per kategori ---------- */
     div[data-testid="stMetric"] {{
-        background: #FFFFFF !important; border: 1px solid #E4E1D6; border-left: 4px solid {FOREST};
+        background: #FFFFFF !important; border: 1px solid #DCE8E5; border-left: 4px solid {FOREST};
         border-radius: 14px; padding: 18px 20px 16px;
         box-shadow: 0 1px 2px rgba(18,53,36,0.05), 0 8px 20px rgba(18,53,36,0.04);
     }}
@@ -145,7 +145,7 @@ st.markdown(
 
     /* ---------- Tombol biasa: lebih premium, tidak kotak polos ---------- */
     .stButton button {{
-        border-radius: 10px !important; font-weight: 600 !important; border: 1px solid #E4E1D6 !important;
+        border-radius: 10px !important; font-weight: 600 !important; border: 1px solid #DCE8E5 !important;
         transition: transform .08s ease, box-shadow .12s ease;
     }}
     .stButton button:hover {{ transform: translateY(-1px); box-shadow: 0 4px 14px rgba(18,53,36,0.12); }}
@@ -158,10 +158,10 @@ st.markdown(
 
     /* ---------- Sidebar: hijau tua + navigasi ala segmented pill ---------- */
     section[data-testid="stSidebar"] {{
-        background: linear-gradient(180deg, {FOREST} 0%, #0C2318 100%) !important;
+        background: linear-gradient(180deg, {FOREST} 0%, #082E2A 100%) !important;
     }}
     section[data-testid="stSidebar"] * {{ color: {IVORY} !important; }}
-    section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{ color: #A9C9B6 !important; }}
+    section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{ color: #9FCFC7 !important; }}
     section[data-testid="stSidebar"] hr {{ border-color: rgba(255,255,255,0.12) !important; }}
 
     section[data-testid="stSidebar"] .stButton button {{
@@ -196,18 +196,18 @@ st.markdown(
 
     /* ---------- Container berbatas (panel) ---------- */
     [data-testid="stVerticalBlockBorderWrapper"] {{
-        border-radius: 16px !important; border-color: #E4E1D6 !important;
+        border-radius: 16px !important; border-color: #DCE8E5 !important;
         box-shadow: 0 1px 2px rgba(18,53,36,0.04), 0 10px 24px rgba(18,53,36,0.05);
     }}
 
     .badge-wait {{ background:#F5E4DA; color:{RUST}; padding:3px 10px; border-radius:99px; font-size:11.5px; font-weight:700; }}
-    .badge-ok {{ background:#E4EEE7; color:{FOREST}; padding:3px 10px; border-radius:99px; font-size:11.5px; font-weight:700; }}
-    .footnote {{ background:#E4EEE7; border-radius:12px; padding:14px 16px; font-size:13px; color:#3d4a40 !important; }}
-    .footnote * {{ color:#3d4a40 !important; }}
+    .badge-ok {{ background:#DFF2EF; color:{FOREST}; padding:3px 10px; border-radius:99px; font-size:11.5px; font-weight:700; }}
+    .footnote {{ background:#DFF2EF; border-radius:12px; padding:14px 16px; font-size:13px; color:#274943 !important; }}
+    .footnote * {{ color:#274943 !important; }}
 
     /* ---------- Hero band (Beranda) ---------- */
     .hero-band {{
-        background: linear-gradient(120deg, {FOREST} 0%, #0C2318 100%);
+        background: linear-gradient(120deg, {FOREST} 0%, #082E2A 100%);
         border-radius: 22px; padding: 36px 40px; color: {IVORY};
         display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px;
         box-shadow: 0 20px 40px rgba(12,35,24,0.25);
@@ -217,13 +217,13 @@ st.markdown(
         content: ""; position: absolute; right: -60px; top: -60px; width: 220px; height: 220px;
         border-radius: 50%; background: radial-gradient(circle, rgba(232,199,118,0.18), transparent 70%);
     }}
-    .hero-eyebrow {{ font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A9C9B6; font-weight: 700; margin: 0 0 10px; }}
+    .hero-eyebrow {{ font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #9FCFC7; font-weight: 700; margin: 0 0 10px; }}
     .hero-number {{ font-family: 'Fraunces', serif; font-weight: 700; font-size: 52px; color: #FFFFFF; margin: 0; line-height: 1; }}
-    .hero-sub {{ font-size: 14px; color: #CBE0D3; margin: 10px 0 0; max-width: 440px; }}
+    .hero-sub {{ font-size: 14px; color: #B8E0D9; margin: 10px 0 0; max-width: 440px; }}
     .hero-split {{ display: flex; gap: 28px; flex-wrap: wrap; }}
     .hero-split-item {{ text-align: right; }}
     .hero-split-num {{ font-family: 'Fraunces', serif; font-size: 24px; font-weight: 700; color: #FFFFFF; }}
-    .hero-split-lbl {{ font-size: 11.5px; color: #A9C9B6; text-transform: uppercase; letter-spacing: 0.05em; }}
+    .hero-split-lbl {{ font-size: 11.5px; color: #9FCFC7; text-transform: uppercase; letter-spacing: 0.05em; }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -1284,9 +1284,9 @@ if section == "🏠 Beranda":
         ))
         fig_rank.update_layout(height=max(280, 42 * len(names)), margin=dict(l=10, r=60, t=10, b=10),
                                 xaxis_title="Rp", plot_bgcolor="white", paper_bgcolor="white",
-                                font=dict(color="#1B2A1E", size=12),
-                                xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
-                                yaxis=dict(color="#1B2A1E", automargin=True, categoryorder="array", categoryarray=names[::-1]))
+                                font=dict(color="#132A26", size=12),
+                                xaxis=dict(gridcolor="#EEF0E8", color="#132A26"),
+                                yaxis=dict(color="#132A26", automargin=True, categoryorder="array", categoryarray=names[::-1]))
         st.plotly_chart(fig_rank, use_container_width=True, theme=None)
 
     with col_r:
@@ -1294,7 +1294,7 @@ if section == "🏠 Beranda":
         fig_donut = go.Figure(go.Pie(
             labels=list(by_jenis.keys()), values=list(by_jenis.values()), hole=0.6,
             marker=dict(colors=[JENIS_COLORS.get(j, "#7C9A85") for j in by_jenis]),
-            textinfo="label+percent", textfont=dict(color="#1B2A1E", size=12),
+            textinfo="label+percent", textfont=dict(color="#132A26", size=12),
         ))
         fig_donut.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10),
                                  showlegend=False, paper_bgcolor="white")
@@ -1311,9 +1311,9 @@ if section == "🏠 Beranda":
         ))
         fig_comp.update_layout(height=max(140, 50 * len(by_company)), margin=dict(l=10, r=60, t=10, b=10),
                                 plot_bgcolor="white", paper_bgcolor="white",
-                                font=dict(color="#1B2A1E", size=12),
-                                xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
-                                yaxis=dict(color="#1B2A1E", automargin=True))
+                                font=dict(color="#132A26", size=12),
+                                xaxis=dict(gridcolor="#EEF0E8", color="#132A26"),
+                                yaxis=dict(color="#132A26", automargin=True))
         st.plotly_chart(fig_comp, use_container_width=True, theme=None)
 
     st.markdown("#### Jelajahi Lebih Lanjut")
@@ -1417,10 +1417,10 @@ elif section == "📋 Portofolio":
             fig.add_bar(x=[None], y=[None], marker_color=color, name=jenis, showlegend=True)
     fig.update_layout(height=100 + 60 * len(names), margin=dict(l=10, r=40, t=10, b=10),
                        xaxis_title="Rp", plot_bgcolor="white", paper_bgcolor="white",
-                       font=dict(color="#1B2A1E", size=13), barmode="overlay",
-                       legend=dict(orientation="h", y=-0.12, font=dict(color="#1B2A1E", size=11)),
-                       xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
-                       yaxis=dict(color="#1B2A1E", automargin=True, categoryorder="array", categoryarray=names[::-1]))
+                       font=dict(color="#132A26", size=13), barmode="overlay",
+                       legend=dict(orientation="h", y=-0.12, font=dict(color="#132A26", size=11)),
+                       xaxis=dict(gridcolor="#EEF0E8", color="#132A26"),
+                       yaxis=dict(color="#132A26", automargin=True, categoryorder="array", categoryarray=names[::-1]))
     st.plotly_chart(fig, use_container_width=True, theme=None)
 
     st.markdown("#### Target Fisik per Periode (Catur Wulan) — Semua Proyek")
@@ -1434,10 +1434,10 @@ elif section == "📋 Portofolio":
                      marker_color=PALETTE[i % len(PALETTE)])
     fig2.update_layout(barmode="stack", height=380, margin=dict(l=10, r=10, t=10, b=10),
                         yaxis_title="Ha", plot_bgcolor="white", paper_bgcolor="white",
-                        legend=dict(orientation="h", y=-0.3, font=dict(color="#1B2A1E", size=11)),
-                        font=dict(color="#1B2A1E", size=13),
-                        xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
-                        yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E", automargin=True))
+                        legend=dict(orientation="h", y=-0.3, font=dict(color="#132A26", size=11)),
+                        font=dict(color="#132A26", size=13),
+                        xaxis=dict(gridcolor="#EEF0E8", color="#132A26"),
+                        yaxis=dict(gridcolor="#EEF0E8", color="#132A26", automargin=True))
     add_now_marker(fig2, keys, "periode")
     add_now_marker(fig2, keys, "tahunan")
     st.plotly_chart(fig2, use_container_width=True, theme=None)
@@ -1461,10 +1461,10 @@ elif section == "📋 Portofolio":
     if any_scurve:
         fig_s.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10),
                              yaxis_title="Rp (kumulatif)", plot_bgcolor="white", paper_bgcolor="white",
-                             legend=dict(orientation="h", y=-0.3, font=dict(color="#1B2A1E", size=11)),
-                             font=dict(color="#1B2A1E", size=13),
-                             xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
-                             yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E", tickformat=",.0f"))
+                             legend=dict(orientation="h", y=-0.3, font=dict(color="#132A26", size=11)),
+                             font=dict(color="#132A26", size=13),
+                             xaxis=dict(gridcolor="#EEF0E8", color="#132A26"),
+                             yaxis=dict(gridcolor="#EEF0E8", color="#132A26", tickformat=",.0f"))
         add_now_marker(fig_s, keys, "periode")
         add_now_marker(fig_s, keys, "tahunan")
         st.plotly_chart(fig_s, use_container_width=True, theme=None)
@@ -1518,9 +1518,9 @@ elif section == "📋 Portofolio":
         fig5.update_layout(
             height=max(220, 46 * len(agg)), margin=dict(l=10, r=40, t=10, b=10),
             xaxis_title="Rp", plot_bgcolor="white", paper_bgcolor="white",
-            font=dict(color="#1B2A1E", size=13),
-            xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
-            yaxis=dict(color="#1B2A1E", automargin=True, categoryorder="total ascending"),
+            font=dict(color="#132A26", size=13),
+            xaxis=dict(gridcolor="#EEF0E8", color="#132A26"),
+            yaxis=dict(color="#132A26", automargin=True, categoryorder="total ascending"),
         )
         st.plotly_chart(fig5, use_container_width=True, theme=None)
 
@@ -1692,10 +1692,10 @@ elif section == "📁 Detail Proyek":
             fig3.add_bar(name="Realisasi", x=keys, y=[rmap.get(k, 0) for k in keys], marker_color=GOLD)
         fig3.update_layout(barmode="group", height=320, margin=dict(l=10, r=10, t=10, b=10),
                             plot_bgcolor="white", paper_bgcolor="white",
-                            legend=dict(orientation="h", y=-0.2, font=dict(color="#1B2A1E")),
-                            font=dict(color="#1B2A1E", size=13),
-                            xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
-                            yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"))
+                            legend=dict(orientation="h", y=-0.2, font=dict(color="#132A26")),
+                            font=dict(color="#132A26", size=13),
+                            xaxis=dict(gridcolor="#EEF0E8", color="#132A26"),
+                            yaxis=dict(gridcolor="#EEF0E8", color="#132A26"))
         add_now_marker(fig3, keys, p["format"])
         st.plotly_chart(fig3, use_container_width=True, key=f"biaya_{p['id']}", theme=None)
 
@@ -1717,10 +1717,10 @@ elif section == "📁 Detail Proyek":
                                 line=dict(color=GOLD, width=3))
         fig_s1.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10),
                               plot_bgcolor="white", paper_bgcolor="white",
-                              legend=dict(orientation="h", y=-0.2, font=dict(color="#1B2A1E")),
-                              font=dict(color="#1B2A1E", size=13),
-                              xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
-                              yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E", tickformat=",.0f"))
+                              legend=dict(orientation="h", y=-0.2, font=dict(color="#132A26")),
+                              font=dict(color="#132A26", size=13),
+                              xaxis=dict(gridcolor="#EEF0E8", color="#132A26"),
+                              yaxis=dict(gridcolor="#EEF0E8", color="#132A26", tickformat=",.0f"))
         add_now_marker(fig_s1, keys, p["format"])
         st.plotly_chart(fig_s1, use_container_width=True, key=f"scurve_{p['id']}", theme=None)
 
@@ -1743,9 +1743,9 @@ elif section == "📁 Detail Proyek":
     )
     fig4.update_layout(height=360, margin=dict(l=10, r=10, t=10, b=10),
                         plot_bgcolor="white", paper_bgcolor="white",
-                        font=dict(color="#1B2A1E", size=13),
-                        legend=dict(font=dict(color="#1B2A1E")))
-    fig4.update_traces(textfont=dict(color="#1B2A1E"))
+                        font=dict(color="#132A26", size=13),
+                        legend=dict(font=dict(color="#132A26")))
+    fig4.update_traces(textfont=dict(color="#132A26"))
     st.plotly_chart(fig4, use_container_width=True, key=f"comp_{p['id']}", theme=None)
 
     st.markdown("#### Rincian Pekerjaan" + ("" if items_reliable else " ⚠️"))
