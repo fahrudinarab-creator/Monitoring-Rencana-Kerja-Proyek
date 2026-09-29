@@ -1139,6 +1139,12 @@ with st.sidebar:
 # Gabungkan: data dari repo GitHub (utama) + file uji coba sesi (opsional, menimpa nama file yang sama)
 projects_all = apply_merge_groups({**repo_projects, **st.session_state.session_projects})
 
+# Terapkan perpindahan halaman yang diminta di run SEBELUMNYA (mis. klik baris tabel),
+# sebelum widget radio "section" di sidebar dibuat pada run ini — tidak boleh mengubah
+# session_state milik sebuah widget setelah widget itu dibuat pada run yang sama.
+if "_pending_section" in st.session_state:
+    st.session_state["section"] = st.session_state.pop("_pending_section")
+
 # ============================================================
 # SIDEBAR — FILTER
 # ============================================================
@@ -1237,6 +1243,9 @@ if section == "📊 Ringkasan Portofolio":
             for p in projects.values()
         ]
         recap_df = pd.DataFrame(recap_rows)
+        recap_df["Biaya Rencana"] = pd.to_numeric(recap_df["Biaya Rencana"])
+        recap_df["Realisasi"] = pd.to_numeric(recap_df["Realisasi"])
+        recap_df["Capaian (%)"] = pd.to_numeric(recap_df["Capaian (%)"])
         event = st.dataframe(
             recap_df, use_container_width=True, hide_index=True, height=420,
             column_config={
@@ -1252,7 +1261,7 @@ if section == "📊 Ringkasan Portofolio":
             sel_rows = []
         if sel_rows:
             st.session_state["detail_project"] = recap_df.iloc[sel_rows[0]]["Proyek"]
-            st.session_state["section"] = "📁 Detail Proyek"
+            st.session_state["_pending_section"] = "📁 Detail Proyek"
             st.rerun()
 
     with col_r:
