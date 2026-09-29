@@ -529,35 +529,36 @@ def _gather_rkp_sheet_candidates(sheetnames):
 
 
 def parse_workbook(file_bytes, file_name):
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
     candidates = _gather_rkp_sheet_candidates(wb.sheetnames)
     if not candidates:
+        wb.close()
         return dict(error='Tidak ditemukan sheet RKP/REKAP di file ini.')
 
-    chosen_sheet, rencana, fmt = None, None, None
+    chosen_sheet, chosen_rows, rencana, fmt = None, None, None, None
     for sheet_name in candidates:
         rows = [list(r) for r in wb[sheet_name].iter_rows(values_only=True)]
         parsed = parse_rkp_rows(rows)
         if parsed:
-            chosen_sheet, rencana, fmt = sheet_name, parsed, "periode"
+            chosen_sheet, chosen_rows, rencana, fmt = sheet_name, rows, parsed, "periode"
             break
         parsed = parse_yearly_coa_rows(rows)
         if parsed:
-            chosen_sheet, rencana, fmt = sheet_name, parsed, "tahunan"
+            chosen_sheet, chosen_rows, rencana, fmt = sheet_name, rows, parsed, "tahunan"
             break
         parsed = parse_simple_list_rows(rows)
         if parsed:
-            chosen_sheet, rencana, fmt = sheet_name, parsed, "sederhana"
+            chosen_sheet, chosen_rows, rencana, fmt = sheet_name, rows, parsed, "sederhana"
             break
 
     if rencana is None:
+        wb.close()
         return dict(error=(
             f"Format tidak dikenali pada sheet yang dicoba ({', '.join(candidates)}). "
             "Bukan format periode (Catur Wulan), tahunan, atau daftar biaya sederhana yang didukung."
         ))
 
-    meta_rows = [list(r) for r in wb[chosen_sheet].iter_rows(values_only=True)]
-    meta = extract_meta(meta_rows, file_name)
+    meta = extract_meta(chosen_rows, file_name)
 
     if fmt == "sederhana" and rencana.get("inline_realisasi_total") is not None:
         total_real = rencana["inline_realisasi_total"]
@@ -568,6 +569,7 @@ def parse_workbook(file_bytes, file_name):
     else:
         realisasi = try_parse_realisasi(wb)
 
+    wb.close()
     return dict(id=file_name, file_name=file_name, updated_at=datetime.now().isoformat(),
                 meta=meta, rencana=rencana, realisasi=realisasi, format=fmt, sheet=chosen_sheet)
 
