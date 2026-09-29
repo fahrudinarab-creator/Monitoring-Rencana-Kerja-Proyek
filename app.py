@@ -202,6 +202,70 @@ def _is_leaf_label(name):
     return not re.match(r"^(total|tatal|sub\s*total|grand\s*total|jumlah)\b", s, re.I)
 
 
+def _extract_reconciled_items(rows, start, end, name_col, biaya_col, vol_col, grand_biaya, period_builder=None):
+    """Bangun daftar item pekerjaan untuk ditampilkan di rekap. File dengan subtotal berlapis
+    (mis. leaf -> Sub Total -> Total -> GRAND TOTAL) akan double/under-count kalau langsung
+    dijumlah di level rincian paling bawah. Di sini dicoba beberapa level granularitas — Sub
+    Total saja, Total saja, gabungan keduanya, atau leaf polos — dan dipilih yang levelnya
+    paling ringkas (sesuai permintaan: level 'sub', bukan rincian sampai ke akar) SELAMA
+    jumlahnya masih merekonsiliasi (mendekati) Grand Total; kalau tidak ada yang cocok,
+    fallback ke leaf item (perilaku lama)."""
+    def mk_item(row, name):
+        vol = row[vol_col] if (vol_col is not None and vol_col < len(row)) else None
+        vol = vol if isinstance(vol, (int, float)) else None
+        biaya = row[biaya_col] if biaya_col < len(row) else None
+        biaya = biaya if isinstance(biaya, (int, float)) else None
+        periods = period_builder(row) if period_builder else []
+        return dict(no=None, nama=str(name).strip(), volume_ha=vol, biaya_rencana=biaya,
+                    rp_per_ha=(biaya / vol) if (biaya and vol) else None, periods=periods)
+
+    leaf_items, subtotal_items, total_items = [], [], []
+    for r in range(start, end):
+        row = rows[r]
+        name = row[name_col] if name_col < len(row) else None
+        biaya = row[biaya_col] if biaya_col < len(row) else None
+        vol = row[vol_col] if (vol_col is not None and vol_col < len(row)) else None
+        if name is None or str(name).strip() == "":
+            continue
+        if not isinstance(biaya, (int, float)) and not isinstance(vol, (int, float)):
+            continue
+        s = str(name).strip()
+        if re.match(r"^sub\s*total\b", s, re.I):
+            subtotal_items.append(mk_item(row, name))
+        elif re.match(r"^(grand\s*total|jumlah)\b", s, re.I):
+            continue
+        elif re.match(r"^(total|tatal)\b", s, re.I):
+            total_items.append(mk_item(row, name))
+        else:
+            leaf_items.append(mk_item(row, name))
+
+    def diff_of(items):
+        if not items or not grand_biaya:
+            return None
+        s = sum(it["biaya_rencana"] for it in items if it["biaya_rencana"])
+        return abs(s - grand_biaya) / abs(grand_biaya)
+
+    # Urutan preferensi: level "sub" paling diutamakan (sesuai permintaan), baru "total",
+    # gabungan keduanya, dan leaf polos paling akhir — dipilih kandidat pertama yang
+    # merekonsiliasi dalam toleransi 3%; kalau tidak ada, pilih yang selisihnya terkecil.
+    candidates = [
+        ("sub_total", subtotal_items),
+        ("total", total_items),
+        ("sub_total+total", subtotal_items + total_items if (subtotal_items and total_items) else []),
+        ("leaf", leaf_items),
+    ]
+    within_tol = [(label, items, d) for label, items, in candidates for d in [diff_of(items)] if d is not None and d <= 0.03]
+    if within_tol:
+        label, items, diff = within_tol[0]
+        return items, True
+    scored = [(label, items, diff_of(items)) for label, items in candidates if items]
+    scored = [t for t in scored if t[2] is not None]
+    if scored:
+        label, items, diff = min(scored, key=lambda t: t[2])
+        return items, diff <= 0.03
+    return leaf_items, _items_reliable(leaf_items, grand_biaya)
+
+
 def find_header_row(rows, names=("pekerjaan", "item", "uraian"), limit=25):
     for r in range(min(len(rows), limit)):
         row = rows[r]
@@ -270,16 +334,8 @@ def parse_rkp_rows(rows):
             break
 
     end = grand_row if grand_row != -1 else len(rows)
-    items = []
-    for r in range(hr + 3, end):
-        row = rows[r]
-        name = row[name_col] if name_col < len(row) else None
-        vol = row[vol_col] if vol_col < len(row) else None
-        biaya = row[biaya_col] if biaya_col < len(row) else None
-        if not _is_leaf_label(name):
-            continue
-        if not isinstance(vol, (int, float)) and not isinstance(biaya, (int, float)):
-            continue
+
+    def build_periods_for_row(row):
         per = []
         for p in cw_periods:
             f = row[p["fisik_col"]] if p["fisik_col"] < len(row) else None
@@ -287,32 +343,24 @@ def parse_rkp_rows(rows):
             per.append(dict(key=p["display"], sort_key=p["sort_key"],
                              fisik=f if isinstance(f, (int, float)) else 0,
                              biaya=b if isinstance(b, (int, float)) else 0))
-        items.append(dict(
-            no=row[1] if len(row) > 1 else None,
-            nama=str(name).strip(),
-            volume_ha=vol if isinstance(vol, (int, float)) else None,
-            biaya_rencana=biaya if isinstance(biaya, (int, float)) else None,
-            rp_per_ha=(biaya / vol) if isinstance(biaya, (int, float)) and isinstance(vol, (int, float)) and vol else None,
-            periods=per,
-        ))
-    if not items:
-        return None
+        return per
 
     grand = None
     if grand_row != -1:
         row = rows[grand_row]
         gvol = row[vol_col] if vol_col < len(row) else None
         gbiaya = row[biaya_col] if biaya_col < len(row) else None
-        gper = []
-        for p in cw_periods:
-            f = row[p["fisik_col"]] if p["fisik_col"] < len(row) else None
-            b = row[p["biaya_col"]] if p["biaya_col"] < len(row) else None
-            gper.append(dict(key=p["display"], sort_key=p["sort_key"],
-                              fisik=f if isinstance(f, (int, float)) else 0,
-                              biaya=b if isinstance(b, (int, float)) else 0))
         grand = dict(volume_ha=gvol if isinstance(gvol, (int, float)) else None,
                      biaya_rencana=gbiaya if isinstance(gbiaya, (int, float)) else None,
-                     periods=gper)
+                     periods=build_periods_for_row(row))
+
+    items, items_reliable = _extract_reconciled_items(
+        rows, hr + 3, end, name_col, biaya_col, vol_col,
+        grand["biaya_rencana"] if grand else None, period_builder=build_periods_for_row,
+    )
+    if not items:
+        return None
+
     if grand is None:
         # fallback: jumlahkan item kalau tidak ada baris GRAND TOTAL eksplisit
         grand = dict(
@@ -321,7 +369,7 @@ def parse_rkp_rows(rows):
             periods=[],
         )
 
-    return dict(items=items, grand=grand, items_reliable=_items_reliable(items, grand["biaya_rencana"]))
+    return dict(items=items, grand=grand, items_reliable=items_reliable)
 
 
 def parse_simple_list_rows(rows):
@@ -407,12 +455,17 @@ def parse_simple_list_rows(rows):
         vals = [it["_realisasi"] for it in items if it["_realisasi"]]
         inline_realisasi_total = sum(vals) if vals else 0
 
-    clean_items = [{k: v for k, v in it.items() if k != "_realisasi"} for it in items]
+    # Untuk ditampilkan (rekap pekerjaan): pakai level yang paling ringkas yang masih
+    # merekonsiliasi ke grand_biaya (Sub Total/Total), bukan rincian leaf paling detail.
+    display_items, items_reliable = _extract_reconciled_items(
+        rows, hr + 1, len(rows), name_col, biaya_col, vol_col, grand_biaya,
+    )
+
     return dict(
-        items=clean_items,
+        items=display_items,
         grand=dict(volume_ha=grand_vol, biaya_rencana=grand_biaya, periods=[]),
         inline_realisasi_total=inline_realisasi_total,
-        items_reliable=_items_reliable(clean_items, grand_biaya),
+        items_reliable=items_reliable,
     )
 
 
@@ -447,23 +500,6 @@ def parse_yearly_coa_rows(rows):
                      biaya=(row[c] if c < len(row) and isinstance(row[c], (int, float)) else 0))
                 for c, yr in year_cols]
 
-    items = []
-    for r in range(hr + 1, len(rows)):
-        row = rows[r]
-        name = row[name_col] if name_col < len(row) else None
-        if not _is_leaf_label(name):
-            continue
-        yr_vals = [row[c] for c, _ in year_cols if c < len(row) and isinstance(row[c], (int, float))]
-        tot_val = row[total_col] if (total_col is not None and total_col < len(row)) else None
-        if not isinstance(tot_val, (int, float)):
-            tot_val = sum(yr_vals) if yr_vals else None
-        if tot_val is None:
-            continue
-        items.append(dict(no=None, nama=str(name).strip(), volume_ha=None,
-                           biaya_rencana=tot_val, rp_per_ha=None, periods=row_periods(row)))
-    if not items:
-        return None
-
     grand_biaya, grand_periods = None, None
     for r in range(hr + 1, len(rows)):
         row = rows[r]
@@ -473,6 +509,13 @@ def parse_yearly_coa_rows(rows):
             if isinstance(tot_val, (int, float)) and (grand_biaya is None or tot_val > grand_biaya):
                 grand_biaya = tot_val
                 grand_periods = row_periods(row)
+
+    items, items_reliable = _extract_reconciled_items(
+        rows, hr + 1, len(rows), name_col, total_col, None, grand_biaya, period_builder=row_periods,
+    )
+    if not items:
+        return None
+
     if grand_biaya is None:
         grand_biaya = sum(it["biaya_rencana"] for it in items if it["biaya_rencana"])
         grand_periods = [dict(key=f"Tahun {yr}", sort_key=yr, fisik=0,
@@ -480,7 +523,7 @@ def parse_yearly_coa_rows(rows):
                           for i, (c, yr) in enumerate(year_cols)]
 
     return dict(items=items, grand=dict(volume_ha=None, biaya_rencana=grand_biaya, periods=grand_periods),
-                items_reliable=_items_reliable(items, grand_biaya))
+                items_reliable=items_reliable)
 
 
 def _items_reliable(items, grand_biaya):
@@ -807,6 +850,31 @@ def realisasi_total(p):
     return g["biaya_rencana"] if g else None
 
 
+def capaian_biaya_pct(p):
+    """% capaian realisasi biaya terhadap rencana (biaya), atau None kalau data belum ada."""
+    rt = realisasi_total(p)
+    rc = total_rencana(p)
+    if rt is None or not rc:
+        return None
+    return rt / rc * 100
+
+
+def capaian_fisik_pct(p):
+    """% capaian realisasi fisik (Ha) terhadap rencana fisik — hanya untuk proyek dengan
+    realisasi per-periode yang cocok (status 'ok') dan format berjadwal (Catur Wulan/Tahun)."""
+    if not has_realisasi(p):
+        return None
+    rg = p["realisasi"]["data"]["grand"]
+    pg = p["rencana"]["grand"]
+    if not rg or not pg or not pg.get("periods"):
+        return None
+    rencana_fisik = sum(pd_["fisik"] for pd_ in pg["periods"])
+    real_fisik = sum(pd_["fisik"] for pd_ in rg["periods"])
+    if not rencana_fisik:
+        return None
+    return real_fisik / rencana_fisik * 100
+
+
 def all_period_keys(projects):
     seen = {}
     for p in projects.values():
@@ -1089,6 +1157,24 @@ if section == "🏠 Beranda":
             unsafe_allow_html=True,
         )
 
+    projects_with_real = [p for p in projects.values() if has_any_realisasi(p)]
+    if projects_with_real:
+        st.markdown("#### Capaian Realisasi vs RKP")
+        total_rencana_real = sum(total_rencana(p) or 0 for p in projects_with_real)
+        total_real_biaya = sum(realisasi_total(p) or 0 for p in projects_with_real)
+        capaian_biaya_agg = (total_real_biaya / total_rencana_real * 100) if total_rencana_real else None
+
+        fisik_projects = [p for p in projects_with_real if capaian_fisik_pct(p) is not None]
+        rc1, rc2, rc3 = st.columns(3)
+        rc1.metric("Proyek dengan Realisasi", f"{len(projects_with_real)} / {len(projects)}")
+        rc2.metric("Capaian Biaya (agregat)", f"{capaian_biaya_agg:.1f}%" if capaian_biaya_agg is not None else "—",
+                   f"{fmt_rp(total_real_biaya)} dari {fmt_rp(total_rencana_real)}")
+        if fisik_projects:
+            avg_fisik = sum(capaian_fisik_pct(p) for p in fisik_projects) / len(fisik_projects)
+            rc3.metric("Capaian Fisik (rata-rata)", f"{avg_fisik:.1f}%", f"{len(fisik_projects)} proyek terukur")
+        else:
+            rc3.metric("Capaian Fisik (rata-rata)", "—", "belum ada proyek dengan data fisik cocok")
+
     col_l, col_r = st.columns([1.4, 1])
     with col_l:
         st.markdown("#### Peringkat Semua Proyek Berdasarkan Nilai")
@@ -1197,6 +1283,8 @@ elif section == "📋 Portofolio":
             "Total Biaya": total_rencana(p),
             "Biaya / Ha": rp_per_ha(p),
             "Progres Waktu (%)": project_time_progress_pct(p),
+            "Capaian Biaya (%)": capaian_biaya_pct(p),
+            "Capaian Fisik (%)": capaian_fisik_pct(p),
             "Status Realisasi": "Tersedia" if has_realisasi(p) else ("Total saja" if has_any_realisasi(p) else "Belum ada"),
         }
         for p in projects.values()
@@ -1208,6 +1296,8 @@ elif section == "📋 Portofolio":
             "Total Biaya": st.column_config.NumberColumn(format="Rp %d"),
             "Biaya / Ha": st.column_config.NumberColumn(format="Rp %d"),
             "Progres Waktu (%)": st.column_config.ProgressColumn(format="%.0f%%", min_value=0, max_value=100),
+            "Capaian Biaya (%)": st.column_config.NumberColumn(format="%.1f%%"),
+            "Capaian Fisik (%)": st.column_config.NumberColumn(format="%.1f%%"),
         },
     )
 
@@ -1448,6 +1538,14 @@ elif section == "📁 Detail Proyek":
     c3.metric("Biaya / Ha", fmt_rp(rp_per_ha(p)))
     status_label = "Tersedia" if real else ("Total saja" if any_real else "Belum ada")
     c4.metric("Status Realisasi", status_label)
+
+    if any_real:
+        cb, cf = capaian_biaya_pct(p), capaian_fisik_pct(p)
+        d1, d2 = st.columns(2)
+        d1.metric("Capaian Realisasi Biaya vs RKP", f"{cb:.1f}%" if cb is not None else "—",
+                  f"{fmt_rp(realisasi_total(p))} dari {fmt_rp(total)}" if cb is not None else None)
+        d2.metric("Capaian Realisasi Fisik vs RKP", f"{cf:.1f}%" if cf is not None else "—",
+                  None if cf is not None else "butuh realisasi per-periode yang cocok")
 
     yr_range = project_year_range(p)
     if yr_range:
