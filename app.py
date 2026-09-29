@@ -132,6 +132,10 @@ st.markdown(
     div[data-testid="stMetricValue"] {{
         color: {FOREST_LIGHT} !important; font-family: 'Fraunces', serif !important; font-weight: 700 !important;
     }}
+    div[data-testid="stMetricValue"] > div {{
+        white-space: normal !important; overflow-wrap: break-word !important; line-height: 1.15 !important;
+        font-size: 22px !important;
+    }}
     div[data-testid="stMetricDelta"] {{ color: {GOLD} !important; font-weight: 600 !important; }}
 
     /* Kartu KPI ke-2/3/4 dalam satu baris: variasi aksen supaya tidak seragam total */
@@ -1290,6 +1294,46 @@ if section == "📊 Ringkasan Portofolio":
             )
             st.plotly_chart(fig_pie, use_container_width=True, theme=None)
 
+    st.markdown("#### Capaian Realisasi Biaya per Proyek")
+    st.caption("Bar = capaian realisasi biaya. Garis vertikal kuning = target 100% (sesuai rencana). Zona merah/kuning/hijau = di bawah target / mendekati / tercapai.")
+    with st.container(border=True):
+        plist_bullet = list(projects.values())
+        n_b = len(plist_bullet)
+        row_h = 1.0 / n_b
+        fig_bullet = go.Figure()
+        for i, p in enumerate(plist_bullet):
+            val = capaian_biaya_pct(p) or 0
+            y0 = 1 - (i + 1) * row_h
+            y1 = 1 - i * row_h
+            axis_max = max(150, val * 1.2 if val else 150)
+            fig_bullet.add_trace(go.Indicator(
+                mode="number+gauge",
+                value=val,
+                domain={"x": [0.32, 0.97], "y": [y0 + row_h * 0.18, y1 - row_h * 0.18]},
+                gauge={
+                    "shape": "bullet",
+                    "axis": {"range": [0, axis_max], "tickfont": {"color": "#8A94A6", "size": 9}},
+                    "threshold": {"line": {"color": GOLD, "width": 3}, "thickness": 0.85, "value": 100},
+                    "steps": [
+                        {"range": [0, 50], "color": "rgba(201,107,74,0.30)"},
+                        {"range": [50, 90], "color": "rgba(232,163,61,0.25)"},
+                        {"range": [90, axis_max], "color": "rgba(47,168,154,0.30)"},
+                    ],
+                    "bar": {"color": FOREST_LIGHT, "thickness": 0.55},
+                },
+                number={"suffix": "%", "font": {"size": 12, "color": "#C9D1D9"}},
+            ))
+            fig_bullet.add_annotation(
+                x=0, y=(y0 + y1) / 2, xref="paper", yref="paper", xanchor="left", yanchor="middle",
+                text=p["meta"]["name"], showarrow=False, font=dict(size=11, color="#C9D1D9"),
+            )
+        fig_bullet.update_layout(
+            height=max(240, 42 * n_b), margin=dict(l=10, r=10, t=10, b=10),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#C9D1D9"),
+        )
+        st.plotly_chart(fig_bullet, use_container_width=True, theme=None)
+
     unreliable_names = [p["meta"]["name"] for p in projects.values() if not p["rencana"].get("items_reliable", True)]
     no_real_count = sum(1 for p in projects.values() if not has_any_realisasi(p))
     alerts = []
@@ -1310,7 +1354,9 @@ else:
 
     f1, f2, f3, f4, f5 = st.columns([1.6, 1, 1, 1, 1])
     with f1:
-        st.selectbox("Filter Proyek", proj_names, key="detail_project")
+        with st.container(border=True):
+            st.caption("FILTER PROYEK")
+            st.selectbox("Filter Proyek", proj_names, key="detail_project", label_visibility="collapsed")
     p = next(pp for pp in projects.values() if pp["meta"]["name"] == st.session_state["detail_project"])
 
     real = has_realisasi(p)
@@ -1338,50 +1384,58 @@ else:
 
     col_l, col_r = st.columns([1.6, 1])
     with col_l:
-        st.markdown("##### Grafik Progres Proyek")
-        g = p["rencana"]["grand"]
-        keys = [pd_["key"] for pd_ in g["periods"]] if g else []
-        if keys:
-            cum_vals, running = [], 0
-            for pd_ in g["periods"]:
-                running += pd_["biaya"]
-                cum_vals.append(running)
-            fig_line = go.Figure()
-            fig_line.add_scatter(x=keys, y=cum_vals, mode="lines+markers", name="Rencana (kumulatif)",
-                                  line=dict(color=FOREST_LIGHT, width=3))
-            if real and p["realisasi"]["data"]["grand"]:
-                rmap = {pd_["key"]: pd_["biaya"] for pd_ in p["realisasi"]["data"]["grand"]["periods"]}
-                cum_real, running_r = [], 0
-                for k in keys:
-                    running_r += rmap.get(k, 0)
-                    cum_real.append(running_r)
-                fig_line.add_scatter(x=keys, y=cum_real, mode="lines+markers", name="Realisasi (kumulatif)",
-                                      line=dict(color=GOLD, width=3))
-            fig_line.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10),
-                                    plot_bgcolor="#141A26", paper_bgcolor="#141A26",
-                                    legend=dict(orientation="h", y=-0.2, font=dict(color="#C9D1D9")),
-                                    font=dict(color="#C9D1D9", size=12),
-                                    xaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9"),
-                                    yaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9", tickformat=",.0f"))
-            add_now_marker(fig_line, keys, p["format"])
-            st.plotly_chart(fig_line, use_container_width=True, theme=None)
-        else:
-            st.info("Proyek ini tidak memiliki jadwal periode (Catur Wulan/Tahun) untuk ditampilkan sebagai grafik garis.")
+        with st.container(border=True):
+            st.markdown("##### Grafik Progres Proyek")
+            g = p["rencana"]["grand"]
+            keys = [pd_["key"] for pd_ in g["periods"]] if g else []
+            if keys:
+                cum_vals, running = [], 0
+                for pd_ in g["periods"]:
+                    running += pd_["biaya"]
+                    cum_vals.append(running)
+                fig_line = go.Figure()
+                fig_line.add_scatter(x=keys, y=cum_vals, mode="lines+markers", name="Rencana (kumulatif)",
+                                      line=dict(color=FOREST_LIGHT, width=3))
+                if real and p["realisasi"]["data"]["grand"]:
+                    rmap = {pd_["key"]: pd_["biaya"] for pd_ in p["realisasi"]["data"]["grand"]["periods"]}
+                    cum_real, running_r = [], 0
+                    for k in keys:
+                        running_r += rmap.get(k, 0)
+                        cum_real.append(running_r)
+                    fig_line.add_scatter(x=keys, y=cum_real, mode="lines+markers", name="Realisasi (kumulatif)",
+                                          line=dict(color=GOLD, width=3))
+                fig_line.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10),
+                                        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                        legend=dict(orientation="h", y=-0.2, font=dict(color="#C9D1D9")),
+                                        font=dict(color="#C9D1D9", size=12),
+                                        xaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9"),
+                                        yaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9", tickformat=",.0f"))
+                add_now_marker(fig_line, keys, p["format"])
+                st.plotly_chart(fig_line, use_container_width=True, theme=None)
+            else:
+                st.markdown(
+                    '<div style="height:340px; display:flex; align-items:center; justify-content:center; '
+                    'text-align:center; color:#8A94A6; font-size:13.5px; padding:0 20px;">'
+                    'Proyek ini tidak memiliki jadwal periode (Catur Wulan/Tahun) untuk ditampilkan '
+                    'sebagai grafik garis.</div>',
+                    unsafe_allow_html=True,
+                )
 
     with col_r:
-        st.markdown("##### Sub Pekerjaan")
-        items = sorted([it for it in p["rencana"]["items"] if it["biaya_rencana"]], key=lambda x: -x["biaya_rencana"])
-        if items:
-            fig_pie2 = go.Figure(go.Pie(
-                labels=[it["nama"] for it in items], values=[it["biaya_rencana"] for it in items],
-                hole=0.45, marker=dict(colors=PALETTE), textinfo="percent",
-                textfont=dict(color="#C9D1D9", size=10),
-            ))
-            fig_pie2.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10),
-                                    paper_bgcolor="#141A26",
-                                    legend=dict(font=dict(color="#C9D1D9", size=10)))
-            st.plotly_chart(fig_pie2, use_container_width=True, theme=None)
-            if not p["rencana"].get("items_reliable", True):
-                st.caption("⚠️ Rincian ini mungkin tidak sepenuhnya akurat — struktur subtotal berlapis di file sumber. Total Biaya Rencana di atas tetap akurat.")
-        else:
-            st.info("Belum ada rincian pekerjaan.")
+        with st.container(border=True):
+            st.markdown("##### Sub Pekerjaan")
+            items = sorted([it for it in p["rencana"]["items"] if it["biaya_rencana"]], key=lambda x: -x["biaya_rencana"])
+            if items:
+                fig_pie2 = go.Figure(go.Pie(
+                    labels=[it["nama"] for it in items], values=[it["biaya_rencana"] for it in items],
+                    hole=0.45, marker=dict(colors=PALETTE, line=dict(color="#141A26", width=2)), textinfo="percent",
+                    textfont=dict(color="#0B0F17", size=10, family="Inter"),
+                ))
+                fig_pie2.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10),
+                                        paper_bgcolor="rgba(0,0,0,0)",
+                                        legend=dict(font=dict(color="#C9D1D9", size=10)))
+                st.plotly_chart(fig_pie2, use_container_width=True, theme=None)
+                if not p["rencana"].get("items_reliable", True):
+                    st.caption("⚠️ Rincian ini mungkin tidak sepenuhnya akurat — struktur subtotal berlapis di file sumber. Total Biaya Rencana di atas tetap akurat.")
+            else:
+                st.info("Belum ada rincian pekerjaan.")
