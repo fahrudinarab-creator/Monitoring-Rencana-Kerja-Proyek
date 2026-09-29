@@ -47,6 +47,7 @@ CANONICAL_COMPANIES = {
 
 # Nama tampilan proyek yang diminta pengguna (menggantikan nama hasil parsing filename).
 PROJECT_NAME_OVERRIDES = {
+    "RKP_BIOGAS_SYSTEM__19_Feb_2026_.xlsx": "Biogas System",
     "RKP_Teluk_Pulai_Kumai_Sentosa__06_Maret_2026_.xlsx": "Pembukaan Lahan Teluk Pulai",
     "RKP_Replanting_BKB_Inti__PT__Buana_Karya_Bhakti_.xlsx": "Replanting BKB Inti",
     "RKP_Reklamasi_FFD_Inti__PT__Fast_Forest_Development_.xlsx": "Reklamasi FFD Inti",
