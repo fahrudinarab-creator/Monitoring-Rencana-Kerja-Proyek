@@ -765,6 +765,65 @@ def all_period_keys(projects):
     return [k for k, _ in sorted(seen.items(), key=lambda x: x[1])]
 
 
+# ---------------- Jenis proyek (untuk pengelompokan) ----------------
+JENIS_COLORS = {
+    "Perkebunan / Tanaman": FOREST,
+    "Pastura": FOREST_LIGHT,
+    "Konstruksi": GOLD,
+    "Konstruksi / Non-Tanaman": RUST,
+    "Lainnya": "#7C9A85",
+}
+
+
+def project_jenis(p):
+    fmt = p.get("format")
+    if fmt == "periode":
+        return "Perkebunan / Tanaman"
+    if fmt == "tahunan":
+        return "Konstruksi"
+    if fmt == "sederhana":
+        return "Pastura" if luas_proj(p) else "Konstruksi / Non-Tanaman"
+    return "Lainnya"
+
+
+# ---------------- Periode "sekarang" & rentang tahun proyek ----------------
+def current_period_label(fmt):
+    """Label periode berjalan saat ini, dalam bentuk yang sama seperti kunci periode
+    proyek (mis. '2026 CW3' untuk tipe periode, 'Tahun 2026' untuk tipe tahunan)."""
+    now = datetime.now()
+    if fmt == "tahunan":
+        return f"Tahun {now.year}"
+    cw = 1 if now.month <= 4 else (2 if now.month <= 8 else 3)
+    return f"{now.year} CW{cw}"
+
+
+def add_now_marker(fig, keys, fmt):
+    """Tambahkan garis vertikal putus-putus penanda periode berjalan saat ini, kalau
+    periode itu ada di daftar kunci sumbu-x grafik (kalau tidak ada, dilewati saja)."""
+    label = current_period_label(fmt)
+    if label in keys:
+        fig.add_shape(
+            type="line", x0=label, x1=label, xref="x", y0=0, y1=1, yref="paper",
+            line=dict(color=RUST, width=2, dash="dot"),
+        )
+        fig.add_annotation(
+            x=label, y=1, xref="x", yref="paper", yanchor="bottom",
+            text="Sekarang", showarrow=False, font=dict(color=RUST, size=11),
+        )
+
+
+def project_year_range(p):
+    """(tahun_mulai, tahun_selesai) dari kunci periode proyek, atau None kalau proyek
+    ini tidak punya jadwal periode sama sekali (mis. Pastura, Biogas, Dermaga)."""
+    g = p["rencana"]["grand"]
+    if not g or not g["periods"]:
+        return None
+    years = [int(m.group(1)) for pd_ in g["periods"] if (m := re.search(r"(\d{4})", pd_["key"]))]
+    if not years:
+        return None
+    return min(years), max(years)
+
+
 # ============================================================
 # DATA DARI REPO GITHUB (folder data/)
 # ============================================================
@@ -864,13 +923,21 @@ if projects_all:
         st.divider()
         st.markdown("#### 🔎 Filter")
 
-        companies = sorted({p["meta"]["company"] for p in projects_all.values()})
+        jenis_list = sorted({project_jenis(p) for p in projects_all.values()})
+        selected_jenis = st.multiselect(
+            "Jenis Proyek", jenis_list, default=jenis_list, key="filter_jenis"
+        )
+        projects_by_jenis = {
+            k: v for k, v in projects_all.items() if project_jenis(v) in selected_jenis
+        }
+
+        companies = sorted({p["meta"]["company"] for p in projects_by_jenis.values()})
         selected_companies = st.multiselect(
             "Perusahaan", companies, default=companies, key="filter_company"
         )
 
         projects_by_company = {
-            k: v for k, v in projects_all.items() if v["meta"]["company"] in selected_companies
+            k: v for k, v in projects_by_jenis.items() if v["meta"]["company"] in selected_companies
         }
 
         project_names = sorted({p["meta"]["name"] for p in projects_by_company.values()})
@@ -921,6 +988,31 @@ if selected_view == "📊 Ringkasan":
     avg_rp_ha = total_biaya / total_luas if total_luas else None
     n_real = sum(1 for p in projects.values() if has_any_realisasi(p))
 
+    top_l, top_r = st.columns([3, 1])
+    with top_l:
+        st.caption(f"{len(projects)} proyek terfilter · diperbarui {datetime.now().strftime('%d %b %Y')}")
+    with top_r:
+        export_df = pd.DataFrame([
+            {
+                "Proyek": p["meta"]["name"],
+                "Perusahaan": p["meta"]["company"],
+                "Jenis": project_jenis(p),
+                "Luas (Ha)": luas_proj(p),
+                "Total Biaya Rencana": total_rencana(p),
+                "Biaya / Ha": rp_per_ha(p),
+                "Status Realisasi": "Tersedia" if has_realisasi(p) else ("Total saja" if has_any_realisasi(p) else "Belum ada"),
+            }
+            for p in projects.values()
+        ])
+        xbuf = io.BytesIO()
+        with pd.ExcelWriter(xbuf, engine="openpyxl") as writer:
+            export_df.to_excel(writer, sheet_name="Ringkasan Proyek", index=False)
+        st.download_button(
+            "📥 Export Excel", data=xbuf.getvalue(), file_name="ringkasan_rkp.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Jumlah Proyek", len(projects), f"{n_real} dengan realisasi")
     c2.metric("Total Luas", fmt_ha(total_luas))
@@ -928,25 +1020,32 @@ if selected_view == "📊 Ringkasan":
     c4.metric("Rata-rata Biaya / Ha", fmt_rp(avg_rp_ha))
 
     st.markdown("#### Perbandingan Biaya Antar Proyek")
+    st.caption("Warna batang menandakan Jenis Proyek — lihat legenda di bawah grafik.")
     mode = st.radio("Mode", ["Total Biaya", "Biaya / Ha"], horizontal=True, label_visibility="collapsed")
-    names = [p["meta"]["name"] for p in projects.values()]
+    plist = sorted(projects.values(), key=lambda p: (project_jenis(p), -(total_rencana(p) or 0)))
+    names = [p["meta"]["name"] for p in plist]
     vals = [
         (total_rencana(p) or 0) if mode == "Total Biaya" else (rp_per_ha(p) or 0)
-        for p in projects.values()
+        for p in plist
     ]
+    bar_colors = [JENIS_COLORS.get(project_jenis(p), "#7C9A85") for p in plist]
     fig = go.Figure(go.Bar(
-        x=vals, y=names, orientation="h",
-        marker_color=[PALETTE[i % len(PALETTE)] for i in range(len(names))],
+        x=vals, y=names, orientation="h", marker_color=bar_colors,
         text=[fmt_rp(v) for v in vals], textposition="outside",
     ))
+    for jenis, color in JENIS_COLORS.items():
+        if jenis in {project_jenis(p) for p in plist}:
+            fig.add_bar(x=[None], y=[None], marker_color=color, name=jenis, showlegend=True)
     fig.update_layout(height=100 + 60 * len(names), margin=dict(l=10, r=40, t=10, b=10),
                        xaxis_title="Rp", plot_bgcolor="white", paper_bgcolor="white",
-                       font=dict(color="#1B2A1E", size=13),
+                       font=dict(color="#1B2A1E", size=13), barmode="overlay",
+                       legend=dict(orientation="h", y=-0.12, font=dict(color="#1B2A1E", size=11)),
                        xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
-                       yaxis=dict(color="#1B2A1E", automargin=True))
+                       yaxis=dict(color="#1B2A1E", automargin=True, categoryorder="array", categoryarray=names[::-1]))
     st.plotly_chart(fig, use_container_width=True, theme=None)
 
     st.markdown("#### Target Fisik per Periode (Catur Wulan) — Semua Proyek")
+    st.caption("Hanya proyek yang punya jadwal periode (perkebunan/konstruksi) yang muncul di sini.")
     keys = all_period_keys(projects)
     fig2 = go.Figure()
     for i, p in enumerate(projects.values()):
@@ -960,7 +1059,38 @@ if selected_view == "📊 Ringkasan":
                         font=dict(color="#1B2A1E", size=13),
                         xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
                         yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E", automargin=True))
+    add_now_marker(fig2, keys, "periode")
+    add_now_marker(fig2, keys, "tahunan")
     st.plotly_chart(fig2, use_container_width=True, theme=None)
+
+    st.markdown("#### Kurva-S Kumulatif Biaya Rencana — Semua Proyek")
+    st.caption("Akumulasi biaya rencana dari waktu ke waktu. Hanya proyek berjadwal periode yang tampil; garis putus-putus menandai periode berjalan saat ini.")
+    fig_s = go.Figure()
+    any_scurve = False
+    for i, p in enumerate(projects.values()):
+        g = p["rencana"]["grand"]
+        if not g or not g["periods"]:
+            continue
+        any_scurve = True
+        m = {pd_["key"]: pd_["biaya"] for pd_ in g["periods"]}
+        vals_s, running = [], 0
+        for k in keys:
+            running += m.get(k, 0)
+            vals_s.append(running)
+        fig_s.add_scatter(x=keys, y=vals_s, mode="lines+markers", name=p["meta"]["name"],
+                           line=dict(color=PALETTE[i % len(PALETTE)], width=2.5))
+    if any_scurve:
+        fig_s.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10),
+                             yaxis_title="Rp (kumulatif)", plot_bgcolor="white", paper_bgcolor="white",
+                             legend=dict(orientation="h", y=-0.3, font=dict(color="#1B2A1E", size=11)),
+                             font=dict(color="#1B2A1E", size=13),
+                             xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
+                             yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E", tickformat=",.0f"))
+        add_now_marker(fig_s, keys, "periode")
+        add_now_marker(fig_s, keys, "tahunan")
+        st.plotly_chart(fig_s, use_container_width=True, theme=None)
+    else:
+        st.info("Tidak ada proyek berjadwal periode pada filter saat ini.")
 
     st.markdown("#### Pekerjaan & Biaya — Semua Proyek")
     st.caption("Semua jenis pekerjaan (level sama seperti tabel Rincian Pekerjaan) digabung lintas proyek yang terfilter.")
@@ -1086,6 +1216,18 @@ else:
     status_label = "Tersedia" if real else ("Total saja" if any_real else "Belum ada")
     c4.metric("Status Realisasi", status_label)
 
+    yr_range = project_year_range(p)
+    if yr_range:
+        start_y, end_y = yr_range
+        now = datetime.now()
+        frac_now = now.year + (now.month - 1) / 12
+        total_span = (end_y + 1) - start_y
+        pct = max(0, min(100, (frac_now - start_y) / total_span * 100)) if total_span > 0 else None
+        if pct is not None:
+            st.markdown(f"**⏱️ Progres Waktu Proyek** — Tahun {start_y} s.d {end_y}")
+            st.progress(int(pct))
+            st.caption(f"Proyek ini seharusnya sudah berjalan sekitar **{pct:.0f}%** dari total durasi rencananya (berdasarkan kalender, bukan realisasi biaya).")
+
     if any_real and not real:
         rt = realisasi_total(p)
         capaian = (rt / total * 100) if (rt is not None and total) else None
@@ -1125,7 +1267,33 @@ else:
                             font=dict(color="#1B2A1E", size=13),
                             xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
                             yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"))
+        add_now_marker(fig3, keys, p["format"])
         st.plotly_chart(fig3, use_container_width=True, key=f"biaya_{p['id']}", theme=None)
+
+        st.markdown("#### Kurva-S Kumulatif Biaya Rencana")
+        cum_vals, running = [], 0
+        for v in rencana_vals:
+            running += v
+            cum_vals.append(running)
+        fig_s1 = go.Figure()
+        fig_s1.add_scatter(x=keys, y=cum_vals, mode="lines+markers", name="Rencana (kumulatif)",
+                            line=dict(color=FOREST, width=3))
+        if real and p["realisasi"]["data"]["grand"]:
+            rmap = {pd_["key"]: pd_["biaya"] for pd_ in p["realisasi"]["data"]["grand"]["periods"]}
+            cum_real, running_r = [], 0
+            for k in keys:
+                running_r += rmap.get(k, 0)
+                cum_real.append(running_r)
+            fig_s1.add_scatter(x=keys, y=cum_real, mode="lines+markers", name="Realisasi (kumulatif)",
+                                line=dict(color=GOLD, width=3))
+        fig_s1.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10),
+                              plot_bgcolor="white", paper_bgcolor="white",
+                              legend=dict(orientation="h", y=-0.2, font=dict(color="#1B2A1E")),
+                              font=dict(color="#1B2A1E", size=13),
+                              xaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E"),
+                              yaxis=dict(gridcolor="#EEF0E8", color="#1B2A1E", tickformat=",.0f"))
+        add_now_marker(fig_s1, keys, p["format"])
+        st.plotly_chart(fig_s1, use_container_width=True, key=f"scurve_{p['id']}", theme=None)
 
     items_reliable = p["rencana"].get("items_reliable", True)
     if not items_reliable:
