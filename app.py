@@ -1191,7 +1191,7 @@ if projects_all:
 # MAIN
 # ============================================================
 def render_header(current_section=None):
-    col_title, col_nav = st.columns([3, 1]) if current_section else (st.container(), None)
+    col_title, col_nav = st.columns([2.2, 1.8]) if current_section else (st.container(), None)
     with col_title:
         st.markdown(
             '<div class="app-header"><span class="app-header-icon">🏗️🌴</span>'
@@ -1202,13 +1202,15 @@ def render_header(current_section=None):
         with col_nav:
             b1, b2 = st.columns(2)
             with b1:
-                if st.button("📊", key="nav_btn_ringkasan", use_container_width=True,
+                if st.button("Portofolio", key="nav_btn_ringkasan", use_container_width=True,
+                              icon=":material/dashboard:",
                               type="primary" if current_section == SECTIONS[0] else "secondary",
                               help=SECTIONS[0]):
                     st.session_state["_pending_section"] = SECTIONS[0]
                     st.rerun()
             with b2:
-                if st.button("📁", key="nav_btn_detail", use_container_width=True,
+                if st.button("Detail Proyek", key="nav_btn_detail", use_container_width=True,
+                              icon=":material/folder_open:",
                               type="primary" if current_section == SECTIONS[1] else "secondary",
                               help=SECTIONS[1]):
                     st.session_state["_pending_section"] = SECTIONS[1]
