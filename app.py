@@ -140,7 +140,8 @@ st.markdown(
     /* ---------- KPI metric cards: aksen tepi kiri berwarna per kategori ---------- */
     div[data-testid="stMetric"] {{
         background: {DARK_PANEL} !important; border: 1px solid {DARK_BORDER}; border-left: 4px solid {FOREST_LIGHT};
-        border-radius: 14px; padding: 18px 20px 16px;
+        border-radius: 14px; padding: 18px 20px 16px; min-height: 118px;
+        display: flex; flex-direction: column; justify-content: center;
         box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 8px 20px rgba(0,0,0,0.18);
     }}
     div[data-testid="stMetricLabel"] p {{
