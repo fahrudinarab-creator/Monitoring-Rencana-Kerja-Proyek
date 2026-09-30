@@ -5,6 +5,7 @@ Deploy: push ke GitHub lalu hubungkan repo di https://share.streamlit.io
 """
 
 import re
+import base64
 import io
 import hashlib
 from pathlib import Path
@@ -285,6 +286,26 @@ def fmt_rp_full(n):
     if n is None or pd.isna(n):
         return "—"
     return f"Rp {n:,.0f}".replace(",", ".")
+
+
+def bullet_svg(pct, max_scale=150, width=170, height=22):
+    """Bullet chart mini (bar + garis target 100%) sebagai gambar SVG inline, dipakai di
+    dalam sel tabel lewat ImageColumn — digambar sendiri (bukan komponen bawaan Streamlit)
+    supaya warna track kosong terlihat jelas KOSONG di tema gelap, bukan seperti penuh."""
+    val = pct if pct is not None else 0
+    val_clamped = max(0, val)
+    track_w = width - 42
+    fill_w = min(val_clamped, max_scale) / max_scale * track_w
+    target_x = min(100, max_scale) / max_scale * track_w
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">'
+        f'<rect x="0" y="{height*0.28:.1f}" width="{track_w}" height="{height*0.44:.1f}" rx="3" fill="#2A3142"/>'
+        f'<rect x="0" y="{height*0.28:.1f}" width="{fill_w:.1f}" height="{height*0.44:.1f}" rx="3" fill="#2FA89A"/>'
+        f'<line x1="{target_x:.1f}" y1="2" x2="{target_x:.1f}" y2="{height-2}" stroke="#E8A33D" stroke-width="2"/>'
+        f'<text x="{track_w+6}" y="{height*0.72:.1f}" font-family="Arial" font-size="11" fill="#C9D1D9">{val:.0f}%</text>'
+        f'</svg>'
+    )
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
 
 
 def fmt_ha(n):
@@ -1276,7 +1297,7 @@ if section == "📊 Ringkasan Portofolio":
                     "Perusahaan": p["meta"]["company"],
                     "Biaya Rencana": fmt_rp_full(total_rencana(p)),
                     "Realisasi": fmt_rp_full(realisasi_total(p)),
-                    "Capaian (%)": f"{capaian_biaya_pct(p):.1f}%" if capaian_biaya_pct(p) is not None else "—",
+                    "Capaian (%)": bullet_svg(capaian_biaya_pct(p)),
                 }
                 for p in projects.values()
             ]
@@ -1288,7 +1309,7 @@ if section == "📊 Ringkasan Portofolio":
                     "Perusahaan": st.column_config.TextColumn(width="medium"),
                     "Biaya Rencana": st.column_config.TextColumn(alignment="right"),
                     "Realisasi": st.column_config.TextColumn(alignment="right"),
-                    "Capaian (%)": st.column_config.TextColumn(alignment="right", width="small"),
+                    "Capaian (%)": st.column_config.ImageColumn(width="medium"),
                 },
             )
 
