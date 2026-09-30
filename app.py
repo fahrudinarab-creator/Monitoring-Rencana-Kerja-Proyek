@@ -1326,7 +1326,7 @@ if section == "📊 Ringkasan Portofolio":
                 textposition="inside",
             ))
             fig_pie.update_layout(
-                height=418, margin=dict(l=10, r=10, t=10, b=10),
+                height=411, margin=dict(l=10, r=10, t=10, b=10),
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 legend=dict(orientation="h", y=-0.08, font=dict(color="#C9D1D9", size=11)),
             )
