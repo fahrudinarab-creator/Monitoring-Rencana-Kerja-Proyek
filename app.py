@@ -1290,7 +1290,7 @@ if section == "📊 Ringkasan Portofolio":
 
     col_l, col_r = st.columns([2, 1])
     with col_l:
-        with st.container(border=True):
+        with st.container(border=True, height=500):
             recap_rows = [
                 {
                     "Proyek": p["meta"]["name"],
@@ -1314,7 +1314,7 @@ if section == "📊 Ringkasan Portofolio":
             )
 
     with col_r:
-        with st.container(border=True):
+        with st.container(border=True, height=500):
             st.markdown("##### Proyek per Perusahaan")
             by_company = {}
             for p in projects.values():
@@ -1326,7 +1326,7 @@ if section == "📊 Ringkasan Portofolio":
                 textposition="inside",
             ))
             fig_pie.update_layout(
-                height=411, margin=dict(l=10, r=10, t=10, b=10),
+                height=424, margin=dict(l=10, r=10, t=10, b=10),
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 legend=dict(orientation="h", y=-0.08, font=dict(color="#C9D1D9", size=11)),
             )
