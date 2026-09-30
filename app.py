@@ -149,10 +149,13 @@ st.markdown(
     }}
     div[data-testid="stMetricValue"] {{
         color: {FOREST_LIGHT} !important; font-family: 'Fraunces', serif !important; font-weight: 700 !important;
+        white-space: normal !important; overflow: visible !important; text-overflow: unset !important;
+        max-width: none !important;
     }}
-    div[data-testid="stMetricValue"] > div {{
-        white-space: normal !important; overflow-wrap: break-word !important; line-height: 1.15 !important;
-        font-size: 22px !important;
+    div[data-testid="stMetricValue"] * {{
+        white-space: normal !important; overflow: visible !important; text-overflow: unset !important;
+        overflow-wrap: break-word !important; word-break: break-word !important; line-height: 1.15 !important;
+        max-width: none !important; font-size: 20px !important;
     }}
     div[data-testid="stMetricDelta"] {{ color: {GOLD} !important; font-weight: 600 !important; }}
 
