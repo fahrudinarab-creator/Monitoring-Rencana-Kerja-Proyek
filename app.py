@@ -1269,7 +1269,7 @@ if section == "📊 Ringkasan Portofolio":
 
     col_l, col_r = st.columns([2, 1])
     with col_l:
-        with st.container(border=True):
+        with st.container(border=True, height=520):
             recap_rows = [
                 {
                     "Proyek": p["meta"]["name"],
@@ -1293,7 +1293,7 @@ if section == "📊 Ringkasan Portofolio":
             )
 
     with col_r:
-        with st.container(border=True):
+        with st.container(border=True, height=520):
             st.markdown("##### Proyek per Perusahaan")
             by_company = {}
             for p in projects.values():
