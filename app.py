@@ -1276,7 +1276,7 @@ if section == "📊 Ringkasan Portofolio":
                     "Perusahaan": p["meta"]["company"],
                     "Biaya Rencana": fmt_rp_full(total_rencana(p)),
                     "Realisasi": fmt_rp_full(realisasi_total(p)),
-                    "Capaian (%)": f"{capaian_biaya_pct(p):.1f}%" if capaian_biaya_pct(p) is not None else "—",
+                    "Capaian (%)": capaian_biaya_pct(p) or 0,
                 }
                 for p in projects.values()
             ]
@@ -1288,7 +1288,7 @@ if section == "📊 Ringkasan Portofolio":
                     "Perusahaan": st.column_config.TextColumn(width="medium"),
                     "Biaya Rencana": st.column_config.TextColumn(alignment="right"),
                     "Realisasi": st.column_config.TextColumn(alignment="right"),
-                    "Capaian (%)": st.column_config.TextColumn(alignment="right", width="small"),
+                    "Capaian (%)": st.column_config.ProgressColumn(format="%.1f%%", min_value=0, max_value=100, width="medium"),
                 },
             )
 
@@ -1310,46 +1310,6 @@ if section == "📊 Ringkasan Portofolio":
                 legend=dict(orientation="h", y=-0.08, font=dict(color="#C9D1D9", size=11)),
             )
             st.plotly_chart(fig_pie, use_container_width=True, theme=None)
-
-    st.markdown("#### Capaian Realisasi Biaya per Proyek")
-    st.caption("Bar = capaian realisasi biaya. Garis vertikal kuning = target 100% (sesuai rencana). Zona merah/kuning/hijau = di bawah target / mendekati / tercapai.")
-    with st.container(border=True):
-        plist_bullet = list(projects.values())
-        n_b = len(plist_bullet)
-        row_h = 1.0 / n_b
-        fig_bullet = go.Figure()
-        for i, p in enumerate(plist_bullet):
-            val = capaian_biaya_pct(p) or 0
-            y0 = 1 - (i + 1) * row_h
-            y1 = 1 - i * row_h
-            axis_max = max(150, val * 1.2 if val else 150)
-            fig_bullet.add_trace(go.Indicator(
-                mode="number+gauge",
-                value=val,
-                domain={"x": [0.32, 0.97], "y": [y0 + row_h * 0.18, y1 - row_h * 0.18]},
-                gauge={
-                    "shape": "bullet",
-                    "axis": {"range": [0, axis_max], "tickfont": {"color": "#8A94A6", "size": 9}},
-                    "threshold": {"line": {"color": GOLD, "width": 3}, "thickness": 0.85, "value": 100},
-                    "steps": [
-                        {"range": [0, 50], "color": "rgba(201,107,74,0.30)"},
-                        {"range": [50, 90], "color": "rgba(232,163,61,0.25)"},
-                        {"range": [90, axis_max], "color": "rgba(47,168,154,0.30)"},
-                    ],
-                    "bar": {"color": FOREST_LIGHT, "thickness": 0.55},
-                },
-                number={"suffix": "%", "font": {"size": 12, "color": "#C9D1D9"}},
-            ))
-            fig_bullet.add_annotation(
-                x=0, y=(y0 + y1) / 2, xref="paper", yref="paper", xanchor="left", yanchor="middle",
-                text=p["meta"]["name"], showarrow=False, font=dict(size=11, color="#C9D1D9"),
-            )
-        fig_bullet.update_layout(
-            height=max(240, 42 * n_b), margin=dict(l=10, r=10, t=10, b=10),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#C9D1D9"),
-        )
-        st.plotly_chart(fig_bullet, use_container_width=True, theme=None)
 
     unreliable_names = [p["meta"]["name"] for p in projects.values() if not p["rencana"].get("items_reliable", True)]
     no_real_count = sum(1 for p in projects.values() if not has_any_realisasi(p))
