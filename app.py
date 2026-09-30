@@ -1276,7 +1276,7 @@ if section == "📊 Ringkasan Portofolio":
                     "Perusahaan": p["meta"]["company"],
                     "Biaya Rencana": fmt_rp_full(total_rencana(p)),
                     "Realisasi": fmt_rp_full(realisasi_total(p)),
-                    "Capaian (%)": capaian_biaya_pct(p) or 0,
+                    "Capaian (%)": f"{capaian_biaya_pct(p):.1f}%" if capaian_biaya_pct(p) is not None else "—",
                 }
                 for p in projects.values()
             ]
@@ -1288,7 +1288,7 @@ if section == "📊 Ringkasan Portofolio":
                     "Perusahaan": st.column_config.TextColumn(width="medium"),
                     "Biaya Rencana": st.column_config.TextColumn(alignment="right"),
                     "Realisasi": st.column_config.TextColumn(alignment="right"),
-                    "Capaian (%)": st.column_config.ProgressColumn(format="%.1f%%", min_value=0, max_value=100, width="medium"),
+                    "Capaian (%)": st.column_config.TextColumn(alignment="right", width="small"),
                 },
             )
 
