@@ -64,6 +64,23 @@ PROJECT_NAME_OVERRIDES = {
     "Timeline_RKP_Kandang_Fattening___RPH_site.xlsx": "Kandang Fattening & RPH",
 }
 
+# Pimpinan (PIC) tiap proyek — dicocokkan ke nama tampilan final (meta.name),
+# jadi tetap benar walau proyeknya hasil gabungan (mis. Plasma Mandiri).
+PIMPINAN_PROYEK = {
+    "Biogas System": "Bapak Ardiansyah",
+    "Pastura Kebun BKB Inti": "Bapak Jumadi",
+    "Pastura Kebun FFD Inti": "Bapak Syarifudin",
+    "Pembukaan Lahan Satui Timur": "Bapak Jumadi",
+    "Dermaga Tahap II BKB": "Bapak Nor Abdi",
+    "Restorasi PKS Batulaki": "Bapak Nor Abdi",
+    "Reklamasi BKB Inti": "Bapak Jumadi",
+    "Reklamasi FFD Inti": "Bapak Syarifudin",
+    "Replanting BKB Inti": "Bapak Jumadi",
+    "Pembukaan Lahan Teluk Pulai": "Bapak Bambang Suswanto",
+    "Kandang Fattening & RPH": "Bapak Wahyu Darsono",
+    "Pembukaan Lahan Plasma Mandiri": "Bapak Bambang Suswanto",
+}
+
 # ============================================================
 # KONFIGURASI HALAMAN & TEMA
 # ============================================================
@@ -1364,7 +1381,7 @@ else:
     cb = capaian_biaya_pct(p)
     cf = capaian_fisik_pct(p)
 
-    f2.metric("Pimpinan Proyek", "—")
+    f2.metric("Pimpinan Proyek", PIMPINAN_PROYEK.get(p["meta"]["name"], "—"))
     f3.metric("Kategori Proyek", project_jenis(p))
     f4.metric("Progres Biaya", f"{cb:.1f}%" if cb is not None else "—")
     f5.metric("Progres Fisik", f"{cf:.1f}%" if cf is not None else "—")
@@ -1404,12 +1421,14 @@ else:
                         cum_real.append(running_r)
                     fig_line.add_scatter(x=keys, y=cum_real, mode="lines+markers", name="Realisasi (kumulatif)",
                                           line=dict(color=GOLD, width=3))
-                fig_line.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10),
+                fig_line.update_layout(height=420, margin=dict(l=10, r=20, t=40, b=90),
                                         plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                        legend=dict(orientation="h", y=-0.2, font=dict(color="#C9D1D9")),
+                                        legend=dict(orientation="h", y=-0.32, font=dict(color="#C9D1D9")),
                                         font=dict(color="#C9D1D9", size=12),
-                                        xaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9"),
-                                        yaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9", tickformat=",.0f"))
+                                        xaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9",
+                                                   tickangle=-45, automargin=True),
+                                        yaxis=dict(gridcolor="rgba(255,255,255,0.08)", color="#C9D1D9",
+                                                   tickformat=",.0f", automargin=True))
                 add_now_marker(fig_line, keys, p["format"])
                 st.plotly_chart(fig_line, use_container_width=True, theme=None)
             else:
